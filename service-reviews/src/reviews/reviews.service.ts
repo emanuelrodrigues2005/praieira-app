@@ -17,7 +17,7 @@ import { CreateReportDto } from "./dto/create-report.dto";
 import { ListReviewsQueryDto } from "./dto/list-reviews-query.dto";
 import { AuthenticatedUser } from "../common/types/authenticated-user";
 import { Prisma } from "@prisma/client";
-import { randomUUID } from "crypto";
+import { CorrelationService } from "../common/correlation/correlation.service";
 
 @Injectable()
 export class ReviewsService {
@@ -29,6 +29,7 @@ export class ReviewsService {
     private readonly prisma: PrismaService,
     private readonly outboxRepo: OutboxRepository,
     @Inject(CATALOG_CLIENT) private readonly catalogClient: CatalogClient,
+    private readonly correlationService: CorrelationService,
   ) {
     this.commentMaxLength = parseInt(
       process.env.REVIEW_COMMENT_MAX_LENGTH ?? "1000",
@@ -50,8 +51,7 @@ export class ReviewsService {
     // Validate worker profile exists via catalog
     await this.validateWorkerProfile(dto.workerProfileId);
 
-    // Build correlation ID from current context (set by middleware)
-    const correlationId = randomUUID();
+    const correlationId = this.correlationService.getCorrelationId();
 
     try {
       const review = await this.prisma.$transaction(async (tx) => {
@@ -66,7 +66,7 @@ export class ReviewsService {
 
         await tx.outboxEvent.create({
           data: {
-            id: randomUUID(),
+            id: correlationId,
             eventName: "review.submitted.v1",
             version: 1,
             occurredAt: new Date(),
@@ -234,13 +234,53 @@ export class ReviewsService {
       throw new UnprocessableEntityException("Comment cannot be empty or whitespace only");
     }
 
-    return this.prisma.review.update({
-      where: { id: reviewId },
-      data: {
-        ...(dto.rating !== undefined && { rating: dto.rating }),
-        ...(comment !== undefined && { comment }),
-      },
-    });
+    const previousRating = review.rating;
+    const previousStatus = review.status;
+
+    const correlationId = this.correlationService.getCorrelationId();
+
+    try {
+      const updated = await this.prisma.$transaction(async (tx) => {
+        const r = await tx.review.update({
+          where: { id: reviewId },
+          data: {
+            ...(dto.rating !== undefined && { rating: dto.rating }),
+            ...(comment !== undefined && { comment }),
+          },
+        });
+
+        await tx.outboxEvent.create({
+          data: {
+            id: correlationId + "-update",
+            eventName: "review.updated.v1",
+            version: 1,
+            occurredAt: new Date(),
+            correlationId,
+            producer: "service-reviews",
+            actor: { userId: user.sub, role: user.role } as any,
+            payload: {
+              reviewId: r.id,
+              workerProfileId: r.workerProfileId,
+              touristUserId: r.touristUserId,
+              previousRating,
+              rating: r.rating,
+              previousStatus,
+              status: r.status,
+              hasComment: r.comment !== null,
+              updatedAt: r.updatedAt.toISOString(),
+            } as any,
+            attempts: 0,
+          },
+        });
+
+        return r;
+      });
+
+      return updated;
+    } catch (error: any) {
+      this.logger.error(`Failed to update review ${reviewId}: ${error.message}`);
+      throw error;
+    }
   }
 
   async remove(reviewId: string, user: AuthenticatedUser) {
@@ -260,12 +300,40 @@ export class ReviewsService {
       throw new ConflictException("Review is already removed");
     }
 
-    return this.prisma.review.update({
-      where: { id: reviewId },
-      data: {
-        status: "REMOVED",
-        deletedAt: new Date(),
-      },
+    const correlationId = this.correlationService.getCorrelationId();
+
+    return this.prisma.$transaction(async (tx) => {
+      const r = await tx.review.update({
+        where: { id: reviewId },
+        data: {
+          status: "REMOVED",
+          deletedAt: new Date(),
+        },
+      });
+
+      await tx.outboxEvent.create({
+        data: {
+          id: correlationId + "-remove",
+          eventName: "review.removed.v1",
+          version: 1,
+          occurredAt: new Date(),
+          correlationId,
+          producer: "service-reviews",
+          actor: { userId: user.sub, role: user.role } as any,
+          payload: {
+            reviewId: r.id,
+            workerProfileId: r.workerProfileId,
+            touristUserId: r.touristUserId,
+            rating: r.rating,
+            previousStatus: review.status,
+            status: "REMOVED",
+            removedAt: r.deletedAt!.toISOString(),
+          } as any,
+          attempts: 0,
+        },
+      });
+
+      return r;
     });
   }
 
@@ -282,33 +350,47 @@ export class ReviewsService {
       throw new NotFoundException("Review not found");
     }
 
+    const previousStatus = review.status;
     const status = dto.action === "HIDDEN" ? "HIDDEN" : "REMOVED";
+    const correlationId = this.correlationService.getCorrelationId();
 
-    const updated = await this.prisma.review.update({
-      where: { id: reviewId },
-      data: {
-        status,
-        moderationReason: dto.reason,
-        moderatedByUserId: user.sub,
-        moderatedAt: new Date(),
-        ...(status === "REMOVED" && { deletedAt: new Date() }),
-      },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const r = await tx.review.update({
+        where: { id: reviewId },
+        data: {
+          status,
+          moderationReason: dto.reason,
+          moderatedByUserId: user.sub,
+          moderatedAt: new Date(),
+          ...(status === "REMOVED" && { deletedAt: new Date() }),
+        },
+      });
+
+      await tx.outboxEvent.create({
+        data: {
+          id: correlationId + "-moderate",
+          eventName: "review.moderated.v1",
+          version: 1,
+          occurredAt: new Date(),
+          correlationId,
+          producer: "service-reviews",
+          actor: { userId: user.sub, role: user.role } as any,
+          payload: {
+            reviewId: r.id,
+            workerProfileId: r.workerProfileId,
+            rating: r.rating,
+            previousStatus,
+            status: r.status,
+            moderatedByUserId: user.sub,
+            reason: dto.reason,
+            moderatedAt: r.moderatedAt!.toISOString(),
+          } as any,
+          attempts: 0,
+        },
+      });
+
+      return r;
     });
-
-    // Emit moderated event
-    const correlationId = randomUUID();
-    await this.outboxRepo.create(
-      "review.moderated.v1",
-      {
-        reviewId: updated.id,
-        workerProfileId: updated.workerProfileId,
-        moderatedByUserId: user.sub,
-        reason: dto.reason,
-        moderatedAt: updated.moderatedAt!.toISOString(),
-      },
-      correlationId,
-      { userId: user.sub, role: user.role },
-    );
 
     return updated;
   }
@@ -337,10 +419,10 @@ export class ReviewsService {
           },
         });
 
-        const correlationId = randomUUID();
+        const correlationId = this.correlationService.getCorrelationId();
         await tx.outboxEvent.create({
           data: {
-            id: randomUUID(),
+            id: correlationId,
             eventName: "review.reported.v1",
             version: 1,
             occurredAt: new Date(),

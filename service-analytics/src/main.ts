@@ -13,19 +13,22 @@ async function bootstrap() {
     transport: Transport.RMQ,
     options: {
       urls: [process.env.RMQ_URL ?? "amqp://guest:guest@localhost:5672"],
-      queue: process.env.RMQ_QUEUE ?? "analytics_queue",
+      queue: process.env.RMQ_QUEUE ?? "analytics.events",
       queueOptions: {
         durable: true,
         arguments: {
-          "x-dead-letter-exchange": "praieira.events",
-          "x-dead-letter-routing-key": "analytics.dlq",
+          "x-dead-letter-exchange":
+            process.env.RMQ_DLX ?? "praieira.dlx",
+          "x-dead-letter-routing-key":
+            process.env.RMQ_DLQ ?? "analytics.events.dlq",
         },
       },
-      noAck: false, // manual ack
+      noAck: false,
       persistent: true,
       prefetchCount: 10,
-      // Retry: max 3 attempts, then DLQ
-      maxAttempts: parseInt(process.env.MAX_RETRY_ATTEMPTS ?? "3", 10),
+      exchange: process.env.RMQ_EXCHANGE ?? "praieira.events",
+      exchangeType: "topic",
+      maxConnectionAttempts: -1,
     },
   });
 

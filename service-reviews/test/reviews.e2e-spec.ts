@@ -1,9 +1,15 @@
 // Set test environment before any imports
 process.env.NODE_ENV = "test";
-process.env.DATABASE_URL =
-  "postgresql://postgres:postgres@172.17.112.1:5433/db_reviews_test?schema=public";
+process.env.DATABASE_URL ??=
+  "postgresql://postgres:postgres@localhost:5433/db_reviews_test?schema=public";
 process.env.JWT_SECRET = "test-jwt-secret";
 process.env.CATALOG_URL = "http://localhost:3302";
+process.env.CATALOG_MODE = "stub";
+process.env.STUB_WORKER_PROFILE_ID = "10000000-0000-4000-8000-000000000001";
+process.env.STUB_WORKER_PROFILE_STATUS = "APPROVED";
+process.env.STUB_WORKER_PROFILE_ACTIVE = "true";
+process.env.STUB_WORKER_WHATSAPP = "5581999999999";
+process.env.STUB_WORKER_PHONE = "5581812345678";
 
 import { Test, TestingModule } from "@nestjs/testing";
 import { INestApplication, ValidationPipe } from "@nestjs/common";

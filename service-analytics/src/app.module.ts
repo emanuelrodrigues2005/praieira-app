@@ -10,6 +10,7 @@ import { ProcessedEvent, ProcessedEventSchema } from "./schemas/processed-event.
 import { WorkerDailyMetrics, WorkerDailyMetricsSchema } from "./schemas/worker-daily-metrics.schema";
 import { JwtStrategy } from "./common/auth/jwt.strategy";
 import { AnalyticsService } from "./analytics.service";
+import { RabbitMqTopologyService } from "./messaging/rabbitmq-topology.service";
 
 @Module({
   imports: [
@@ -31,6 +32,6 @@ import { AnalyticsService } from "./analytics.service";
     ]),
   ],
   controllers: [AppController, AnalyticsController],
-  providers: [JwtStrategy, AnalyticsService],
+  providers: [JwtStrategy, AnalyticsService, RabbitMqTopologyService],
 })
 export class AppModule {}

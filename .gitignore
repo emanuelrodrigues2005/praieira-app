@@ -24,6 +24,9 @@ dist/
 .DS_Store
 Thumbs.db
 
+# Reasonix
+.reasonix/
+
 # Docker
 .docker/
 

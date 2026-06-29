@@ -37,6 +37,13 @@ enum ReportStatus {
   DISMISSED
 }
 
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  PUBLISHED
+  DEAD
+}
+
 // ── Models ──
 
 model Review {
@@ -89,20 +96,24 @@ model Report {
 }
 
 model OutboxEvent {
-  id             String    @id
-  eventName      String    @map("event_name")
-  version        Int       @default(1)
-  occurredAt     DateTime  @default(now()) @map("occurred_at")
-  correlationId  String    @map("correlation_id")
-  producer       String    @default("service-reviews")
+  id             String        @id
+  eventName      String        @map("event_name")
+  version        Int           @default(1)
+  occurredAt     DateTime      @default(now()) @map("occurred_at")
+  correlationId  String        @map("correlation_id")
+  producer       String        @default("service-reviews")
   actor          Json?
   payload        Json
-  attempts       Int       @default(0)
-  nextAttemptAt  DateTime? @map("next_attempt_at")
-  publishedAt    DateTime? @map("published_at")
-  lastError      String?   @db.Text @map("last_error")
-  createdAt      DateTime  @default(now()) @map("created_at")
+  status         OutboxStatus  @default(PENDING)
+  attempts       Int           @default(0)
+  lockedAt       DateTime?     @map("locked_at")
+  lockedBy       String?       @map("locked_by")
+  nextAttemptAt  DateTime?     @map("next_attempt_at")
+  publishedAt    DateTime?     @map("published_at")
+  failedAt       DateTime?     @map("failed_at")
+  lastError      String?       @db.Text @map("last_error")
+  createdAt      DateTime      @default(now()) @map("created_at")
 
-  @@index([publishedAt, nextAttemptAt])
+  @@index([status, nextAttemptAt])
   @@map("outbox_events")
 }

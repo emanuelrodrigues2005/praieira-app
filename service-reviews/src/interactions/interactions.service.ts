@@ -10,7 +10,7 @@ import { OutboxRepository } from "../messaging/outbox.repository";
 import { CATALOG_CLIENT, CatalogClient } from "../catalog/catalog-client.interface";
 import { CreateContactInteractionDto } from "./dto/create-contact-interaction.dto";
 import { AuthenticatedUser } from "../common/types/authenticated-user";
-import { randomUUID } from "crypto";
+import { CorrelationService } from "../common/correlation/correlation.service";
 
 @Injectable()
 export class InteractionsService {
@@ -20,6 +20,7 @@ export class InteractionsService {
     private readonly prisma: PrismaService,
     private readonly outboxRepo: OutboxRepository,
     @Inject(CATALOG_CLIENT) private readonly catalogClient: CatalogClient,
+    private readonly correlationService: CorrelationService,
   ) {}
 
   async registerContact(
@@ -53,7 +54,7 @@ export class InteractionsService {
       contactUrl = this.buildFallbackUrl(dto.channel, workerProfileId);
     }
 
-    const correlationId = randomUUID();
+    const correlationId = this.correlationService.getCorrelationId();
 
     const interaction = await this.prisma.$transaction(async (tx) => {
       const i = await tx.interaction.create({
@@ -68,7 +69,7 @@ export class InteractionsService {
 
       await tx.outboxEvent.create({
         data: {
-          id: randomUUID(),
+          id: correlationId,
           eventName: "contact.clicked.v1",
           version: 1,
           occurredAt: new Date(),

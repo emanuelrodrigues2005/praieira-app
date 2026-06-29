@@ -1,11 +1,25 @@
-import { Controller, Get, Param, Query, UseGuards, Logger } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  Param,
+  Query,
+  UseGuards,
+  Logger,
+  ForbiddenException,
+  BadRequestException,
+} from "@nestjs/common";
 import {
   EventPattern,
   Payload,
   Ctx,
   RmqContext,
 } from "@nestjs/microservices";
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from "@nestjs/swagger";
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+} from "@nestjs/swagger";
 import { AnalyticsService } from "./analytics.service";
 import { JwtAuthGuard } from "./common/auth/jwt-auth.guard";
 import { RolesGuard } from "./common/auth/roles.guard";
@@ -33,11 +47,11 @@ export class AnalyticsController {
   ) {
     const channel = context.getChannelRef();
     const originalMsg = context.getMessage();
-    const attempt = this.getRetryCount(originalMsg);
 
     try {
-      if (!envelope?.eventId || !envelope?.payload?.profileId) {
-        channel.ack(originalMsg);
+      if (!envelope?.eventId || !envelope?.payload?.workerProfileId) {
+        this.logger.warn("Invalid profile.viewed.v1 envelope, rejecting");
+        channel.nack(originalMsg, false, false); // reject, no requeue
         return;
       }
 
@@ -47,28 +61,25 @@ export class AnalyticsController {
         return;
       }
 
+      await this.analyticsService.handleProfileViewed({
+        eventId: envelope.eventId,
+        workerProfileId: envelope.payload.workerProfileId,
+        viewerUserId: envelope.payload.viewerUserId,
+        viewerRole: envelope.payload.viewerRole,
+        beach: envelope.payload.beach,
+        viewedAt: envelope.payload.viewedAt,
+      });
+
       await this.analyticsService.markProcessed(
         envelope.eventId,
         envelope.eventName,
       );
-      await this.analyticsService.handleProfileViewed({
-        eventId: envelope.eventId,
-        profileId: envelope.payload.profileId,
-        viewerRole: envelope.actor?.role,
-        beach: envelope.payload.beach,
-        timestamp: envelope.payload.timestamp,
-      });
-
       channel.ack(originalMsg);
     } catch (error: any) {
       this.logger.error(
-        `profile.viewed.v1 error (attempt ${attempt}/${this.maxAttempts}): ${error.message}`,
+        `profile.viewed.v1 error: ${error.message} (eventId=${envelope?.eventId})`,
       );
-      if (attempt >= this.maxAttempts) {
-        channel.ack(originalMsg); // drop to DLQ
-      } else {
-        channel.nack(originalMsg, false, true); // requeue
-      }
+      channel.nack(originalMsg, false, true);
     }
   }
 
@@ -79,11 +90,10 @@ export class AnalyticsController {
   ) {
     const channel = context.getChannelRef();
     const originalMsg = context.getMessage();
-    const attempt = this.getRetryCount(originalMsg);
 
     try {
       if (!envelope?.eventId || !envelope?.payload?.workerProfileId) {
-        channel.ack(originalMsg);
+        channel.nack(originalMsg, false, false);
         return;
       }
 
@@ -93,27 +103,149 @@ export class AnalyticsController {
         return;
       }
 
+      await this.analyticsService.handleReviewSubmitted({
+        eventId: envelope.eventId,
+        workerProfileId: envelope.payload.workerProfileId,
+        rating: envelope.payload.rating ?? 0,
+        submittedAt: envelope.payload.submittedAt,
+      });
+
       await this.analyticsService.markProcessed(
         envelope.eventId,
         envelope.eventName,
       );
-      await this.analyticsService.handleReviewSubmitted({
-        eventId: envelope.eventId,
-        reviewId: envelope.payload.reviewId,
-        workerProfileId: envelope.payload.workerProfileId,
-        rating: envelope.payload.rating ?? 0,
-      });
-
       channel.ack(originalMsg);
     } catch (error: any) {
       this.logger.error(
-        `review.submitted.v1 error (attempt ${attempt}/${this.maxAttempts}): ${error.message}`,
+        `review.submitted.v1 error: ${error.message} (eventId=${envelope?.eventId})`,
       );
-      if (attempt >= this.maxAttempts) {
-        channel.ack(originalMsg);
-      } else {
-        channel.nack(originalMsg, false, true);
+      channel.nack(originalMsg, false, true);
+    }
+  }
+
+  @EventPattern("review.updated.v1")
+  async handleReviewUpdated(
+    @Payload() envelope: any,
+    @Ctx() context: RmqContext,
+  ) {
+    const channel = context.getChannelRef();
+    const originalMsg = context.getMessage();
+
+    try {
+      if (!envelope?.eventId || !envelope?.payload?.workerProfileId) {
+        channel.nack(originalMsg, false, false);
+        return;
       }
+
+      const isDup = await this.analyticsService.isDuplicate(envelope.eventId);
+      if (isDup) {
+        channel.ack(originalMsg);
+        return;
+      }
+
+      await this.analyticsService.handleReviewUpdated({
+        eventId: envelope.eventId,
+        workerProfileId: envelope.payload.workerProfileId,
+        previousRating: envelope.payload.previousRating ?? 0,
+        rating: envelope.payload.rating ?? 0,
+        previousStatus: envelope.payload.previousStatus ?? "PUBLISHED",
+        status: envelope.payload.status ?? "PUBLISHED",
+        updatedAt: envelope.payload.updatedAt,
+      });
+
+      await this.analyticsService.markProcessed(
+        envelope.eventId,
+        envelope.eventName,
+      );
+      channel.ack(originalMsg);
+    } catch (error: any) {
+      this.logger.error(
+        `review.updated.v1 error: ${error.message} (eventId=${envelope?.eventId})`,
+      );
+      channel.nack(originalMsg, false, true);
+    }
+  }
+
+  @EventPattern("review.removed.v1")
+  async handleReviewRemoved(
+    @Payload() envelope: any,
+    @Ctx() context: RmqContext,
+  ) {
+    const channel = context.getChannelRef();
+    const originalMsg = context.getMessage();
+
+    try {
+      if (!envelope?.eventId || !envelope?.payload?.workerProfileId) {
+        channel.nack(originalMsg, false, false);
+        return;
+      }
+
+      const isDup = await this.analyticsService.isDuplicate(envelope.eventId);
+      if (isDup) {
+        channel.ack(originalMsg);
+        return;
+      }
+
+      await this.analyticsService.handleReviewRemoved({
+        eventId: envelope.eventId,
+        workerProfileId: envelope.payload.workerProfileId,
+        rating: envelope.payload.rating ?? 0,
+        previousStatus: envelope.payload.previousStatus ?? "PUBLISHED",
+        removedAt: envelope.payload.removedAt,
+      });
+
+      await this.analyticsService.markProcessed(
+        envelope.eventId,
+        envelope.eventName,
+      );
+      channel.ack(originalMsg);
+    } catch (error: any) {
+      this.logger.error(
+        `review.removed.v1 error: ${error.message} (eventId=${envelope?.eventId})`,
+      );
+      channel.nack(originalMsg, false, true);
+    }
+  }
+
+  @EventPattern("review.moderated.v1")
+  async handleReviewModerated(
+    @Payload() envelope: any,
+    @Ctx() context: RmqContext,
+  ) {
+    const channel = context.getChannelRef();
+    const originalMsg = context.getMessage();
+
+    try {
+      if (!envelope?.eventId || !envelope?.payload?.workerProfileId) {
+        channel.nack(originalMsg, false, false);
+        return;
+      }
+
+      const isDup = await this.analyticsService.isDuplicate(envelope.eventId);
+      if (isDup) {
+        channel.ack(originalMsg);
+        return;
+      }
+
+      await this.analyticsService.handleReviewModerated({
+        eventId: envelope.eventId,
+        workerProfileId: envelope.payload.workerProfileId,
+        rating: envelope.payload.rating ?? 0,
+        previousStatus: envelope.payload.previousStatus ?? "PUBLISHED",
+        status: envelope.payload.status ?? "HIDDEN",
+        moderatedAt: envelope.payload.moderatedAt,
+      });
+
+      await this.analyticsService.markProcessed(
+        envelope.eventId,
+        envelope.eventName,
+      );
+      channel.ack(originalMsg);
+    } catch (error: any) {
+      this.logger.error(
+        `review.moderated.v1 error: ${error.message} (eventId=${envelope?.eventId})`,
+      );
+      channel.nack(originalMsg, false, true);
     }
   }
 
@@ -124,11 +256,10 @@ export class AnalyticsController {
   ) {
     const channel = context.getChannelRef();
     const originalMsg = context.getMessage();
-    const attempt = this.getRetryCount(originalMsg);
 
     try {
       if (!envelope?.eventId || !envelope?.payload?.workerProfileId) {
-        channel.ack(originalMsg);
+        channel.nack(originalMsg, false, false);
         return;
       }
 
@@ -138,38 +269,24 @@ export class AnalyticsController {
         return;
       }
 
+      await this.analyticsService.handleContactClicked({
+        eventId: envelope.eventId,
+        workerProfileId: envelope.payload.workerProfileId,
+        channel: envelope.payload.channel,
+        clickedAt: envelope.payload.clickedAt,
+      });
+
       await this.analyticsService.markProcessed(
         envelope.eventId,
         envelope.eventName,
       );
-      await this.analyticsService.handleContactClicked({
-        eventId: envelope.eventId,
-        interactionId: envelope.payload.interactionId,
-        workerProfileId: envelope.payload.workerProfileId,
-        channel: envelope.payload.channel,
-      });
-
       channel.ack(originalMsg);
     } catch (error: any) {
       this.logger.error(
-        `contact.clicked.v1 error (attempt ${attempt}/${this.maxAttempts}): ${error.message}`,
+        `contact.clicked.v1 error: ${error.message} (eventId=${envelope?.eventId})`,
       );
-      if (attempt >= this.maxAttempts) {
-        channel.ack(originalMsg);
-      } else {
-        channel.nack(originalMsg, false, true);
-      }
+      channel.nack(originalMsg, false, true);
     }
-  }
-
-  // ── Retry helper ──
-
-  private getRetryCount(msg: any): number {
-    const deathHeader = msg?.properties?.headers?.["x-death"];
-    if (Array.isArray(deathHeader) && deathHeader.length > 0) {
-      return deathHeader[0].count ?? 0;
-    }
-    return 0;
   }
 
   // ── REST Endpoints ──
@@ -187,11 +304,14 @@ export class AnalyticsController {
     @Query("to") to?: string,
     @CurrentUser() user?: AuthenticatedUser,
   ) {
-    // WORKER can only see own profile
+    // Block WORKER until catalog ownership verification exists
     if (user?.role === "WORKER") {
-      // For MVP: WORKER's sub should match ownerUserId from catalog
-      // For now, allow the query (ownership validated by catalog later)
+      throw new ForbiddenException(
+        "A verificação de propriedade do perfil ainda não está disponível.",
+      );
     }
+
+    this.validateDateRange(from, to);
 
     const today = new Date().toISOString().slice(0, 10);
     const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000)
@@ -209,7 +329,7 @@ export class AnalyticsController {
 
   @Get("analytics/workers/:id/timeseries")
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles("WORKER", "CURATOR")
+  @Roles("CURATOR")
   @ApiBearerAuth()
   @ApiOperation({ summary: "Worker daily timeseries" })
   @ApiQuery({ name: "from", required: false })
@@ -219,6 +339,8 @@ export class AnalyticsController {
     @Query("from") from?: string,
     @Query("to") to?: string,
   ) {
+    this.validateDateRange(from, to);
+
     const today = new Date().toISOString().slice(0, 10);
     const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000)
       .toISOString()
@@ -245,6 +367,8 @@ export class AnalyticsController {
     @Query("from") from?: string,
     @Query("to") to?: string,
   ) {
+    this.validateDateRange(from, to);
+
     const today = new Date().toISOString().slice(0, 10);
     const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000)
       .toISOString()
@@ -257,5 +381,18 @@ export class AnalyticsController {
     );
 
     return { data: result };
+  }
+
+  private validateDateRange(from?: string, to?: string) {
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (from && !dateRegex.test(from)) {
+      throw new BadRequestException("Invalid 'from' date format. Use YYYY-MM-DD.");
+    }
+    if (to && !dateRegex.test(to)) {
+      throw new BadRequestException("Invalid 'to' date format. Use YYYY-MM-DD.");
+    }
+    if (from && to && from > to) {
+      throw new BadRequestException("'from' date must be before or equal to 'to' date.");
+    }
   }
 }
