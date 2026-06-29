@@ -108,6 +108,18 @@ services:
       PORT: "3003"
       DATABASE_URL: "postgresql://postgres:postgres@postgres_db:5432/db_reviews?schema=public"
       RMQ_URL: "amqp://guest:guest@rabbitmq:5672"
+      RMQ_EXCHANGE: "praieira.events"
+      JWT_SECRET: "dev-jwt-secret-change-in-production"
+      JWT_ALGORITHM: "HS256"
+      CATALOG_URL: "http://service-catalog:3002"
+      CATALOG_REQUEST_TIMEOUT_MS: "3000"
+      CORS_ORIGIN: "http://localhost:4200"
+      OUTBOX_POLL_INTERVAL_MS: "1000"
+      OUTBOX_BATCH_SIZE: "20"
+      OUTBOX_MAX_ATTEMPTS: "10"
+      OUTBOX_RETRY_BASE_DELAY_MS: "2000"
+      REVIEW_COMMENT_MAX_LENGTH: "1000"
+      REVIEW_EDIT_WINDOW_HOURS: "24"
     depends_on:
       postgres_db:
         condition: service_healthy
@@ -148,6 +160,14 @@ services:
       PORT: "3005"
       MONGO_URL: "mongodb://mongo_db:27017/db_analytics"
       RMQ_URL: "amqp://guest:guest@rabbitmq:5672"
+      RMQ_EXCHANGE: "praieira.events"
+      RMQ_QUEUE: "analytics_queue"
+      JWT_SECRET: "dev-jwt-secret-change-in-production"
+      JWT_ALGORITHM: "HS256"
+      CATALOG_URL: "http://service-catalog:3002"
+      CATALOG_REQUEST_TIMEOUT_MS: "3000"
+      CORS_ORIGIN: "http://localhost:4200"
+      MAX_RETRY_ATTEMPTS: "3"
     depends_on:
       mongo_db:
         condition: service_healthy

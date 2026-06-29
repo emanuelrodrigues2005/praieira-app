@@ -6,13 +6,12 @@ dist/
 *.tsbuildinfo
 
 # Prisma
-prisma/migrations/
-!prisma/migrations/.gitkeep
 
 # Environment
 .env
 .env.local
 .env.*.local
+.env.test
 
 # IDE
 .vscode/
