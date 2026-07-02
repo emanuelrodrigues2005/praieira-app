@@ -3,9 +3,14 @@ import { InteractionsController } from "./interactions.controller";
 import { InteractionsService } from "./interactions.service";
 import { CatalogModule } from "../catalog/catalog.module";
 import { MessagingModule } from "../messaging/messaging.module";
+import { CorrelationModule } from "../common/correlation/correlation.module";
 
 @Module({
-  imports: [CatalogModule, MessagingModule],
+  imports: [
+    CatalogModule,
+    MessagingModule,
+    CorrelationModule,
+  ],
   controllers: [InteractionsController],
   providers: [InteractionsService],
 })
