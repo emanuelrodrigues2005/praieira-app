@@ -6,7 +6,6 @@ import {
   UnprocessableEntityException,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import { randomUUID } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { CATALOG_CLIENT, CatalogClient } from "../catalog/catalog-client.interface";
 import { CreateContactInteractionDto } from "./dto/create-contact-interaction.dto";
@@ -71,7 +70,6 @@ export class InteractionsService {
 
       await tx.outboxEvent.create({
         data: {
-          id: randomUUID(),
           eventName: "contact.clicked.v1",
           version: 1,
           occurredAt: new Date(),

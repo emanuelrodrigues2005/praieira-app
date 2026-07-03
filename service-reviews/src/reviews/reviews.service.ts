@@ -8,7 +8,6 @@ import {
   UnprocessableEntityException,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import { randomUUID } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { CATALOG_CLIENT, CatalogClient } from "../catalog/catalog-client.interface";
 import { CreateReviewDto } from "./dto/create-review.dto";
@@ -66,7 +65,6 @@ export class ReviewsService {
 
         await tx.outboxEvent.create({
           data: {
-            id: randomUUID(),
             eventName: "review.submitted.v1",
             version: 1,
             occurredAt: new Date(),
@@ -251,7 +249,6 @@ export class ReviewsService {
 
         await tx.outboxEvent.create({
           data: {
-            id: randomUUID(),
             eventName: "review.updated.v1",
             version: 1,
             occurredAt: new Date(),
@@ -314,7 +311,6 @@ export class ReviewsService {
 
       await tx.outboxEvent.create({
         data: {
-          id: randomUUID(),
           eventName: "review.removed.v1",
           version: 1,
           occurredAt: new Date(),
@@ -370,7 +366,6 @@ export class ReviewsService {
 
       await tx.outboxEvent.create({
         data: {
-          id: randomUUID(),
           eventName: "review.moderated.v1",
           version: 1,
           occurredAt: new Date(),
@@ -425,7 +420,6 @@ export class ReviewsService {
         const correlationId = this.correlationService.getCorrelationId();
         await tx.outboxEvent.create({
           data: {
-            id: randomUUID(),
             eventName: "review.reported.v1",
             version: 1,
             occurredAt: new Date(),

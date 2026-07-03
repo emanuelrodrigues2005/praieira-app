@@ -96,7 +96,7 @@ model Report {
 }
 
 model OutboxEvent {
-  id             String        @id
+  id             String        @id @default(uuid())
   eventName      String        @map("event_name")
   version        Int           @default(1)
   occurredAt     DateTime      @default(now()) @map("occurred_at")
