@@ -9,6 +9,7 @@ import { HttpExceptionFilter } from "./common/errors/http-exception.filter";
 import { CorrelationMiddleware } from "./common/correlation/correlation.middleware";
 import { PrismaModule } from "./prisma/prisma.module";
 import { MessagingModule } from "./messaging/messaging.module";
+import { WorkersModule } from "./workers/workers.module";
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { MessagingModule } from "./messaging/messaging.module";
     }),
     PrismaModule,
     MessagingModule,
+    WorkersModule,
   ],
   controllers: [AppController],
   providers: [
