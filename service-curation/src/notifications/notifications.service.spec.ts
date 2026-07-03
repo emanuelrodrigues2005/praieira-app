@@ -1,6 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { NotificationsService } from "./notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { OutboxRepository } from "../messaging/outbox.repository";
 import { NotFoundException, ForbiddenException } from "@nestjs/common";
 
 describe("NotificationsService", () => {
@@ -15,6 +16,18 @@ describe("NotificationsService", () => {
       count: jest.fn(),
       update: jest.fn(),
     },
+    notificationPreference: {
+      findUnique: jest.fn(),
+      upsert: jest.fn(),
+    },
+    outboxEvent: {
+      create: jest.fn(),
+    },
+    $transaction: jest.fn((callback) => callback(mockPrisma)),
+  };
+
+  const mockOutboxRepo = {
+    create: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -24,6 +37,7 @@ describe("NotificationsService", () => {
       providers: [
         NotificationsService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: OutboxRepository, useValue: mockOutboxRepo },
       ],
     }).compile();
 
@@ -136,6 +150,67 @@ describe("NotificationsService", () => {
 
       await expect(service.markAsRead("n-1", "user-abc")).rejects.toThrow(ForbiddenException);
       expect(prisma.notification.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("preferences", () => {
+    it("should return default preferences if none saved", async () => {
+      mockPrisma.notificationPreference.findUnique.mockResolvedValue(null);
+
+      const result = await service.getPreferences("user-123");
+
+      expect(mockPrisma.notificationPreference.findUnique).toHaveBeenCalledWith({
+        where: { userId: "user-123" },
+      });
+      expect(result).toEqual({
+        review_reply: true,
+        moderation_alert: true,
+        platform_news: true,
+        contact_request: true,
+      });
+    });
+
+    it("should return saved preferences merged with defaults", async () => {
+      mockPrisma.notificationPreference.findUnique.mockResolvedValue({
+        userId: "user-123",
+        preferences: { review_reply: false },
+      });
+
+      const result = await service.getPreferences("user-123");
+
+      expect(result).toEqual({
+        review_reply: false,
+        moderation_alert: true,
+        platform_news: true,
+        contact_request: true,
+      });
+    });
+
+    it("should update preferences and emit outbox event", async () => {
+      mockPrisma.notificationPreference.findUnique.mockResolvedValue(null);
+      mockPrisma.notificationPreference.upsert.mockResolvedValue({
+        preferences: {
+          review_reply: false,
+          moderation_alert: true,
+          platform_news: true,
+          contact_request: true,
+        },
+      });
+
+      const result: any = await service.updatePreferences(
+        "user-123",
+        { review_reply: false },
+        "corr-123",
+      );
+
+      expect(mockPrisma.notificationPreference.upsert).toHaveBeenCalled();
+      expect(mockPrisma.outboxEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          eventName: "notification.preferences.updated.v1",
+          correlationId: "corr-123",
+        }),
+      });
+      expect(result.review_reply).toBe(false);
     });
   });
 });

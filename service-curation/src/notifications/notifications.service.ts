@@ -6,13 +6,18 @@ import {
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { ListNotificationsQueryDto } from "./dto/list-notifications-query.dto";
+import { UpdatePreferencesDto } from "./dto/preferences.dto";
+import { OutboxRepository } from "../messaging/outbox.repository";
 import { randomUUID } from "crypto";
 
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly outboxRepo: OutboxRepository,
+  ) {}
 
   // ── RMQ Event Consumers ──
 
@@ -108,5 +113,75 @@ export class NotificationsService {
     });
 
     return updated;
+  }
+
+  async getPreferences(userId: string) {
+    const pref = await this.prisma.notificationPreference.findUnique({
+      where: { userId },
+    });
+
+    const defaults = {
+      review_reply: true,
+      moderation_alert: true,
+      platform_news: true,
+      contact_request: true,
+    };
+
+    if (!pref) {
+      return defaults;
+    }
+
+    return {
+      ...defaults,
+      ...(pref.preferences as any),
+    };
+  }
+
+  async updatePreferences(
+    userId: string,
+    dto: UpdatePreferencesDto,
+    correlationId: string,
+  ) {
+    const current = await this.getPreferences(userId);
+
+    const merged = {
+      ...current,
+      ...dto,
+    };
+
+    const updatedPreferences = await this.prisma.$transaction(async (tx) => {
+      // Upsert preferences
+      const pref = await tx.notificationPreference.upsert({
+        where: { userId },
+        create: {
+          userId,
+          preferences: merged,
+        },
+        update: {
+          preferences: merged,
+        },
+      });
+
+      // Write event to outbox
+      await tx.outboxEvent.create({
+        data: {
+          id: randomUUID(),
+          eventName: "notification.preferences.updated.v1",
+          version: 1,
+          occurredAt: new Date(),
+          correlationId,
+          producer: "service-curation",
+          payload: {
+            userId,
+            preferences: merged,
+          },
+          status: "PENDING",
+        },
+      });
+
+      return pref.preferences;
+    });
+
+    return updatedPreferences;
   }
 }

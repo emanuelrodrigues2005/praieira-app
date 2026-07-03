@@ -4,6 +4,7 @@ import {
   Patch,
   Param,
   Query,
+  Body,
   UseGuards,
   Logger,
   Inject,
@@ -25,6 +26,7 @@ import { JwtAuthGuard } from "../common/auth/jwt-auth.guard";
 import { CurrentUser } from "../common/auth/current-user.decorator";
 import { AuthenticatedUser } from "../common/types/authenticated-user";
 import { ListNotificationsQueryDto } from "./dto/list-notifications-query.dto";
+import { UpdatePreferencesDto } from "./dto/preferences.dto";
 import { SuccessResponse } from "../common/http/response.interface";
 import { CORRELATION_ID_KEY } from "../common/correlation/correlation.middleware";
 import { REQUEST } from "@nestjs/core";
@@ -85,6 +87,44 @@ export class NotificationsController {
         totalPages: result.meta.totalPages,
         requestId: this.request[CORRELATION_ID_KEY] || "system",
       } as any,
+    };
+  }
+
+  @Get("preferences")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Get current user notification preferences" })
+  async getPreferences(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<SuccessResponse<any>> {
+    const result = await this.notificationsService.getPreferences(user.sub);
+    return {
+      data: result,
+      meta: {
+        requestId: this.request[CORRELATION_ID_KEY] || "system",
+      },
+    };
+  }
+
+  @Patch("preferences")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Update/merge notification preferences for the logged-in user" })
+  async updatePreferences(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdatePreferencesDto,
+  ): Promise<SuccessResponse<any>> {
+    const correlationId = this.request[CORRELATION_ID_KEY] || "system";
+    const result = await this.notificationsService.updatePreferences(
+      user.sub,
+      dto,
+      correlationId,
+    );
+    return {
+      data: result,
+      meta: {
+        requestId: correlationId,
+      },
     };
   }
 
