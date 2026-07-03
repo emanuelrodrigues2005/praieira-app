@@ -1,5 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { INestApplication } from "@nestjs/common";
+import { MicroserviceOptions, Transport } from "@nestjs/microservices";
 import { AppModule } from "../src/app.module";
 import { Connection } from "mongoose";
 import { getConnectionToken } from "@nestjs/mongoose";
@@ -41,22 +42,42 @@ describe("service-analytics events (e2e)", () => {
     app = moduleFixture.createNestApplication();
     await app.init();
 
+    // Connect RMQ microservice consumer (mirrors main.ts)
+    app.connectMicroservice<MicroserviceOptions>({
+      transport: Transport.RMQ,
+      options: {
+        urls: [process.env.RMQ_URL ?? "amqp://guest:guest@localhost:5673"],
+        queue: process.env.RMQ_QUEUE ?? QUEUE,
+        queueOptions: {
+          durable: true,
+          arguments: {
+            "x-dead-letter-exchange":
+              process.env.RMQ_DLX ?? DLX,
+            "x-dead-letter-routing-key":
+              process.env.RMQ_DLQ ?? DLQ,
+          },
+        },
+        noAck: false,
+        persistent: true,
+        prefetchCount: 10,
+        exchange: process.env.RMQ_EXCHANGE ?? EXCHANGE,
+        exchangeType: "topic",
+        wildcards: true,
+      },
+    });
+    await app.startAllMicroservices();
+
     connection = app.get(getConnectionToken());
 
     // Setup RabbitMQ connection for publishing test events
     rmqConnection = await amqp.connect("amqp://guest:guest@localhost:5673");
     rmqChannel = await rmqConnection.createChannel();
 
-    // Exchanges already created by RabbitMqTopologyService.setup()
+    // Exchanges and queues created by RabbitMqTopologyService.setup()
     await rmqChannel.checkExchange(EXCHANGE);
     await rmqChannel.checkExchange(RETRY_EXCHANGE);
     await rmqChannel.checkExchange(DLX);
-
-    // Queues already created by RabbitMqTopologyService.setup()
     await rmqChannel.checkQueue(QUEUE);
-
-    // Wait for consumers to be ready
-    await new Promise((resolve) => setTimeout(resolve, 1000));
   });
 
   afterAll(async () => {

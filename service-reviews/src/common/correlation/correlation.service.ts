@@ -9,8 +9,6 @@ export class CorrelationService {
   constructor(@Inject(REQUEST) private readonly request: Request) {}
 
   getCorrelationId(): string {
-    return (
-      (this.request as any)[CORRELATION_ID_KEY] || randomUUID()
-    );
+    return (this.request as any)?.[CORRELATION_ID_KEY] ?? randomUUID();
   }
 }

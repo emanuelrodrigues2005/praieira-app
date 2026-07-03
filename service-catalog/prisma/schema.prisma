@@ -7,20 +7,44 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model WorkerProfile {
-  id          String   @id @default(uuid())
-  name        String
-  description String?
-  category    String
-  phone       String?
-  whatsapp    String?
-  latitude    Float
-  longitude   Float
-  beach       String
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+enum ProfileStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
 
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  PUBLISHED
+  DEAD
+}
+
+model WorkerProfile {
+  id            String        @id @default(uuid())
+  ownerUserId   String        @map("owner_user_id")
+  name          String
+  description   String?
+  category      String
+  phone         String?
+  whatsapp      String?
+  latitude      Float
+  longitude     Float
+  beach         String
+  status        ProfileStatus @default(DRAFT)
+  rejectedReason String?      @map("rejected_reason")
+  reviewedBy    String?       @map("reviewed_by")
+  reviewedAt    DateTime?     @map("reviewed_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  services      ServiceItem[]
+
+  @@index([status, beach])
+  @@index([status, category])
+  @@index([ownerUserId])
+  @@index([status, latitude, longitude])
   @@map("worker_profiles")
 }
 
@@ -33,10 +57,35 @@ model ServiceItem {
   latitude    Float
   longitude   Float
   beach       String
+  isAvailable Boolean @default(true) @map("is_available")
   workerId    String   @map("worker_id")
-  isAvailable Boolean  @default(true) @map("is_available")
+  worker      WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
+  @@index([workerId, isAvailable])
   @@map("service_items")
+}
+
+model OutboxEvent {
+  id             String       @id @default(uuid())
+  eventName      String       @map("event_name")
+  version        Int          @default(1)
+  occurredAt     DateTime     @default(now()) @map("occurred_at")
+  correlationId  String       @map("correlation_id")
+  producer       String       @default("service-catalog")
+  actor          Json?
+  payload        Json
+  status         OutboxStatus @default(PENDING)
+  attempts       Int          @default(0)
+  lockedAt       DateTime?    @map("locked_at")
+  lockedBy       String?      @map("locked_by")
+  nextAttemptAt  DateTime?    @map("next_attempt_at")
+  publishedAt    DateTime?    @map("published_at")
+  failedAt       DateTime?    @map("failed_at")
+  lastError      String?      @db.Text @map("last_error")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@index([status, nextAttemptAt])
+  @@map("outbox_events")
 }
