@@ -82,12 +82,14 @@ describe("AuthService", () => {
           phone: null,
         },
       });
-      expect(result).toEqual({
+      expect(result.accessToken).toEqual("mocked-jwt-token");
+      expect(result.refreshToken).toBeDefined();
+      expect(result.user).toEqual({
         id: "user-123",
         email: "joao@test.com",
         role: Role.TOURIST,
       });
-      expect((result as any).passwordHash).toBeUndefined();
+      expect((result.user as any).passwordHash).toBeUndefined();
     });
 
     it("should throw ConflictException if email is already registered", async () => {
@@ -136,6 +138,11 @@ describe("AuthService", () => {
       expect(prisma.refreshSession.create).toHaveBeenCalled();
       expect(result.accessToken).toEqual("mocked-jwt-token");
       expect(result.refreshToken).toBeDefined();
+      expect(result.user).toEqual({
+        id: "user-123",
+        email: "joao@test.com",
+        role: Role.TOURIST,
+      });
     });
 
     it("should throw UnauthorizedException if user not found", async () => {

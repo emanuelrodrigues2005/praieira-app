@@ -21,7 +21,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async register(dto: RegisterDto) {
+  async register(dto: RegisterDto, correlationId: string = "system") {
     const email = dto.email.toLowerCase().trim();
 
     // Check unique email
@@ -32,11 +32,11 @@ export class AuthService {
       throw new ConflictException("Email already registered");
     }
 
-    // Hash password
-    const passwordHash = await bcrypt.hash(dto.password, 10);
+    // Hash password (12 rounds)
+    const passwordHash = await bcrypt.hash(dto.password, 12);
 
-    // Create user and profile in transaction
-    const user = await this.prisma.$transaction(async (tx) => {
+    // Create user, profile, refresh session and outbox event in transaction
+    const { user, refreshToken } = await this.prisma.$transaction(async (tx) => {
       const u = await tx.user.create({
         data: {
           email,
@@ -53,11 +53,52 @@ export class AuthService {
         },
       });
 
-      return u;
+      const rt = randomUUID();
+      const rth = this.hashToken(rt);
+      const expAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+      await tx.refreshSession.create({
+        data: {
+          userId: u.id,
+          tokenHash: rth,
+          expiresAt: expAt,
+        },
+      });
+
+      // Create outbox event (optional for analytics, but highly recommended)
+      await tx.outboxEvent.create({
+        data: {
+          id: randomUUID(),
+          eventName: "user.registered.v1",
+          version: 1,
+          occurredAt: new Date(),
+          correlationId,
+          producer: "service-auth",
+          payload: {
+            userId: u.id,
+            email: u.email,
+            role: u.role,
+            name: dto.name,
+          },
+          status: "PENDING",
+        },
+      });
+
+      return { user: u, refreshToken: rt };
+    });
+
+    const accessToken = this.jwtService.sign({
+      sub: user.id,
+      role: user.role,
+      email: user.email,
     });
 
     const { passwordHash: _, ...result } = user;
-    return result;
+    return {
+      accessToken,
+      refreshToken,
+      user: result,
+    };
   }
 
   async login(dto: LoginDto) {
@@ -98,6 +139,11 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      },
     };
   }
 

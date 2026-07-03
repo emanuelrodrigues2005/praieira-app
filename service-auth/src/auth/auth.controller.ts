@@ -24,11 +24,12 @@ export class AuthController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: "Register a new tourist or worker user" })
   async register(@Body() dto: RegisterDto): Promise<SuccessResponse<any>> {
-    const result = await this.authService.register(dto);
+    const correlationId = this.request[CORRELATION_ID_KEY] || "system";
+    const result = await this.authService.register(dto, correlationId);
     return {
       data: result,
       meta: {
-        requestId: this.request[CORRELATION_ID_KEY] || "system",
+        requestId: correlationId,
       },
     };
   }
