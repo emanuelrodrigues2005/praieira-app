@@ -260,9 +260,15 @@ Content-Type: application/json
 | Evento | Routing Key | Quando |
 |---|---|---|
 | `review.submitted.v1` | `review.submitted.v1` | Nova avaliação |
-| `review.moderated.v1` | `review.moderated.v1` | Curador modera |
+| `review.updated.v1` | `review.updated.v1` | Avaliação editada (nota e/ou comentário) |
+| `review.removed.v1` | `review.removed.v1` | Avaliação removida pelo autor |
+| `review.moderated.v1` | `review.moderated.v1` | Curador modera (oculta ou remove) |
 | `review.reported.v1` | `review.reported.v1` | Usuário denuncia |
 | `contact.clicked.v1` | `contact.clicked.v1` | Clique em canal de contato |
+
+### Campos de Eventos de Avaliação
+
+Eventos de atualização, remoção e moderação incluem `originalSubmittedAt` (timestamp ISO da criação original da avaliação), `previousStatus` (status anterior), e `previousRating` (nota anterior quando aplicável), para permitir que o Analytics corrija a métrica no dia correto.
 
 Exchange: `praieira.events` (topic, durable)
 
