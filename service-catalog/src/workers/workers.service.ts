@@ -38,6 +38,10 @@ export class WorkersService {
         longitude: dto.longitude,
         beach: dto.beach,
         status: "DRAFT",
+        coverImage: dto.coverImage,
+        gallery: dto.gallery ?? [],
+        tags: dto.tags ?? [],
+        businessHours: dto.businessHours ?? undefined,
       },
     });
   }
