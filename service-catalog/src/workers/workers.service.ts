@@ -127,4 +127,23 @@ export class WorkersService {
       timestamp: new Date().toISOString(),
     });
   }
+
+  async verifyProfileOwnership(
+    profileId: string,
+    userId: string,
+  ) {
+    const profile = await this.prisma.workerProfile.findUnique({
+      where: { id: profileId },
+    });
+
+    if (!profile) {
+      throw new NotFoundException("Worker profile not found");
+    }
+
+    if (profile.ownerUserId !== userId) {
+      throw new ForbiddenException("You do not own this profile");
+    }
+
+    return profile;
+  }
 }

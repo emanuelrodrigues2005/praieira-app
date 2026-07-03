@@ -10,6 +10,7 @@ import { CorrelationMiddleware } from "./common/correlation/correlation.middlewa
 import { PrismaModule } from "./prisma/prisma.module";
 import { MessagingModule } from "./messaging/messaging.module";
 import { WorkersModule } from "./workers/workers.module";
+import { ServicesModule } from "./services/services.module";
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { WorkersModule } from "./workers/workers.module";
     PrismaModule,
     MessagingModule,
     WorkersModule,
+    ServicesModule,
   ],
   controllers: [AppController],
   providers: [
