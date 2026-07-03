@@ -25,6 +25,7 @@ export function authHeader(user?: Partial<TestUser>): { Authorization: string } 
 export const testUsers = {
   tourist: { sub: "tourist-uuid", role: "TOURIST" as const, email: "tourist@test.com" },
   worker: { sub: "worker-uuid", role: "WORKER" as const, email: "worker@test.com" },
+  worker2: { sub: "worker2-uuid", role: "WORKER" as const, email: "worker2@test.com" },
   curator: { sub: "curator-uuid", role: "CURATOR" as const, email: "curator@test.com" },
   admin: { sub: "admin-uuid", role: "ADMIN" as const, email: "admin@test.com" },
 };
