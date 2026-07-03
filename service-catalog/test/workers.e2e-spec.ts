@@ -6,6 +6,7 @@ import { AppModule } from "../src/app.module";
 import { PrismaService } from "../src/prisma/prisma.service";
 import { authHeader, testUsers } from "./helpers/auth-helper";
 import { cleanDatabase } from "./helpers/db-helper";
+import { OutboxPublisherService } from "../src/messaging/outbox-publisher.service";
 
 // ── Test setup ──
 
@@ -444,6 +445,165 @@ describe("WorkerProfile CRUD (e2e) — real DB", () => {
 
       expect(res.status).toBe(404);
     });
+  });
+});
+
+// ── Bullets 1-5: Submit to curation ──
+
+describe("Submit to Curation (e2e)", () => {
+  let app: INestApplication;
+  let prismaService: PrismaService;
+  let publisher: OutboxPublisherService;
+  let profileId: string;
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+    );
+    prismaService = moduleFixture.get(PrismaService);
+    publisher = moduleFixture.get(OutboxPublisherService);
+    publisher.start(500, 10);
+    await prismaService.$connect();
+    await app.init();
+  });
+
+  afterAll(async () => {
+    publisher.stop();
+    await app.close();
+    await prismaService.$disconnect();
+  });
+
+  beforeEach(async () => {
+    await cleanDatabase();
+    const createRes = await request(app.getHttpServer())
+      .post("/catalog/workers")
+      .set(authHeader(testUsers.worker))
+      .send({ name: "Profile for Submit", category: "barraqueiro", latitude: -8.25, longitude: -35.0, beach: "Gaibu" });
+    profileId = createRes.body.data.id;
+  });
+
+  // Bullet 1: DRAFT → PENDING
+  it("should transition DRAFT to PENDING and return 200", async () => {
+    const res = await request(app.getHttpServer())
+      .post("/catalog/workers/me/submit")
+      .set(authHeader(testUsers.worker))
+      .send({ profileId });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe("PENDING");
+    expect(res.body.data.id).toBe(profileId);
+  });
+
+  // Bullet 2: REJECTED → PENDING
+  it("should transition REJECTED to PENDING and return 200", async () => {
+    await prismaService.workerProfile.update({
+      where: { id: profileId },
+      data: { status: "REJECTED" },
+    });
+
+    const res = await request(app.getHttpServer())
+      .post("/catalog/workers/me/submit")
+      .set(authHeader(testUsers.worker))
+      .send({ profileId });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe("PENDING");
+  });
+
+  // Bullet 3: PENDING → 409
+  it("should return 409 when profile is already PENDING", async () => {
+    await prismaService.workerProfile.update({
+      where: { id: profileId },
+      data: { status: "PENDING" },
+    });
+
+    const res = await request(app.getHttpServer())
+      .post("/catalog/workers/me/submit")
+      .set(authHeader(testUsers.worker))
+      .send({ profileId });
+
+    expect(res.status).toBe(409);
+  });
+
+  // Bullet 3b: APPROVED → 409
+  it("should return 409 when profile is APPROVED", async () => {
+    await prismaService.workerProfile.update({
+      where: { id: profileId },
+      data: { status: "APPROVED" },
+    });
+
+    const res = await request(app.getHttpServer())
+      .post("/catalog/workers/me/submit")
+      .set(authHeader(testUsers.worker))
+      .send({ profileId });
+
+    expect(res.status).toBe(409);
+  });
+
+  // Bullet 4: Non-existent → 404
+  it("should return 404 for non-existent profile", async () => {
+    const res = await request(app.getHttpServer())
+      .post("/catalog/workers/me/submit")
+      .set(authHeader(testUsers.worker))
+      .send({ profileId: "nonexistent-id" });
+
+    expect(res.status).toBe(404);
+  });
+
+  // Bullet 5: Other's profile → 404
+  it("should return 404 for another worker's profile", async () => {
+    const res = await request(app.getHttpServer())
+      .post("/catalog/workers/me/submit")
+      .set(authHeader(testUsers.worker2))
+      .send({ profileId });
+
+    expect(res.status).toBe(404);
+  });
+
+  // Bullet 6: Outbox row created after submission
+  it("should create an outbox_events row with worker.profile.submitted.v1 after submission", async () => {
+    await request(app.getHttpServer())
+      .post("/catalog/workers/me/submit")
+      .set(authHeader(testUsers.worker))
+      .send({ profileId });
+
+    const result = await prismaService.$queryRawUnsafe<
+      Array<{ event_name: string; payload: any }>
+    >(
+      `SELECT event_name, payload::text FROM outbox_events WHERE event_name = 'worker.profile.submitted.v1' ORDER BY occurred_at DESC LIMIT 1`,
+    );
+
+    expect(result.length).toBe(1);
+    expect(result[0].event_name).toBe("worker.profile.submitted.v1");
+    const payload = JSON.parse(result[0].payload);
+    expect(payload.profileId).toBe(profileId);
+    expect(payload.ownerUserId).toBe(testUsers.worker.sub);
+    expect(payload.workerName).toBe("Profile for Submit");
+    expect(payload.beach).toBe("Gaibu");
+    expect(payload.category).toBe("barraqueiro");
+  });
+
+  // Bullet 7: Outbox row with correct producer
+  it("should create outbox events with producer 'service-catalog'", async () => {
+    await request(app.getHttpServer())
+      .post("/catalog/workers/me/submit")
+      .set(authHeader(testUsers.worker))
+      .send({ profileId });
+
+    const result = await prismaService.$queryRawUnsafe<
+      Array<{ producer: string; event_name: string }>
+    >(
+      `SELECT producer, event_name FROM outbox_events WHERE event_name = 'worker.profile.submitted.v1' ORDER BY occurred_at DESC LIMIT 1`,
+    );
+
+    expect(result.length).toBe(1);
+    expect(result[0].producer).toBe("service-catalog");
+    expect(result[0].event_name).toBe("worker.profile.submitted.v1");
   });
 });
 

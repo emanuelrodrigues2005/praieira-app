@@ -8,7 +8,7 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
     "test": "jest",
-    "test:e2e": "cross-env DATABASE_URL=\"postgresql://postgres:postgres@localhost:5433/db_catalog_test?schema=public\" jest --config ./test/jest-e2e.json --no-cache",
+    "test:e2e": "cross-env NODE_ENV=test DATABASE_URL=\"postgresql://postgres:postgres@localhost:5433/db_catalog_test?schema=public\" jest --config ./test/jest-e2e.json --no-cache",
     "test:watch": "jest --watch",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
