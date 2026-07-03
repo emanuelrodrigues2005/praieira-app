@@ -1,8 +1,15 @@
-import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from "@nestjs/common";
 import * as amqp from "amqplib";
 
 @Injectable()
-export class RabbitMqTopologyService implements OnModuleInit {
+export class RabbitMqTopologyService
+  implements OnModuleInit, OnModuleDestroy
+{
   private readonly logger = new Logger(RabbitMqTopologyService.name);
   private connection: amqp.Connection | null = null;
 
@@ -40,6 +47,13 @@ export class RabbitMqTopologyService implements OnModuleInit {
     await this.setup();
   }
 
+  async onModuleDestroy() {
+    if (this.connection) {
+      await this.connection.close();
+      this.connection = null;
+    }
+  }
+
   async setup() {
     try {
       this.connection = await amqp.connect(this.rmqUrl);
@@ -75,9 +89,7 @@ export class RabbitMqTopologyService implements OnModuleInit {
         durable: true,
         arguments: {
           "x-dead-letter-exchange": this.exchange,
-          "x-dead-letter-routing-key": "#",
           "x-message-ttl": this.retryDelayMs,
-          "x-max-retries": this.maxRetryAttempts,
         },
       });
       await channel.bindQueue(
@@ -138,7 +150,7 @@ export class RabbitMqTopologyService implements OnModuleInit {
     const channel = await this.connection.createConfirmChannel();
 
     try {
-      const message = {
+      const retriedEnvelope = {
         ...envelope,
         _retry: {
           count: retryCount + 1,
@@ -148,10 +160,15 @@ export class RabbitMqTopologyService implements OnModuleInit {
         },
       };
 
+      const packet = {
+        pattern: eventName,
+        data: retriedEnvelope,
+      };
+
       channel.publish(
         this.retryExchange,
         eventName,
-        Buffer.from(JSON.stringify(message)),
+        Buffer.from(JSON.stringify(packet)),
         {
           persistent: true,
           contentType: "application/json",
@@ -164,8 +181,10 @@ export class RabbitMqTopologyService implements OnModuleInit {
       );
 
       await channel.waitForConfirms();
+
       this.logger.debug(
-        `Published to retry: ${eventName} (retry ${retryCount + 1}/${this.maxRetryAttempts})`,
+        `Published to retry: ${eventName} ` +
+          `(retry ${retryCount + 1}/${this.maxRetryAttempts})`,
       );
     } finally {
       await channel.close();
@@ -185,7 +204,7 @@ export class RabbitMqTopologyService implements OnModuleInit {
     const channel = await this.connection.createConfirmChannel();
 
     try {
-      const message = {
+      const deadEnvelope = {
         ...envelope,
         _dead: {
           attempts: retryCount + 1,
@@ -194,24 +213,32 @@ export class RabbitMqTopologyService implements OnModuleInit {
         },
       };
 
+      const packet = {
+        pattern: eventName,
+        data: deadEnvelope,
+      };
+
       channel.publish(
         this.dlx,
         this.dlq,
-        Buffer.from(JSON.stringify(message)),
+        Buffer.from(JSON.stringify(packet)),
         {
           persistent: true,
           contentType: "application/json",
           messageId: envelope.eventId,
           headers: {
             "x-dead-reason": error,
+            "x-retry-count": retryCount,
             "x-correlation-id": envelope.correlationId,
           },
         },
       );
 
       await channel.waitForConfirms();
+
       this.logger.warn(
-        `Published to DLQ: ${eventName} (after ${retryCount + 1} attempts)`,
+        `Published to DLQ: ${eventName} ` +
+          `(after ${retryCount + 1} attempts)`,
       );
     } finally {
       await channel.close();

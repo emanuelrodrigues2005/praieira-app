@@ -28,6 +28,7 @@ async function bootstrap() {
       prefetchCount: 10,
       exchange: process.env.RMQ_EXCHANGE ?? "praieira.events",
       exchangeType: "topic",
+      wildcards: true,
       maxConnectionAttempts: -1,
     },
   });

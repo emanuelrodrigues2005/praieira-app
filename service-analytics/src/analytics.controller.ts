@@ -21,6 +21,7 @@ import {
   ApiQuery,
 } from "@nestjs/swagger";
 import { AnalyticsService } from "./analytics.service";
+import { RabbitMqTopologyService } from "./messaging/rabbitmq-topology.service";
 import { JwtAuthGuard } from "./common/auth/jwt-auth.guard";
 import { RolesGuard } from "./common/auth/roles.guard";
 import { Roles } from "./common/auth/roles.decorator";
@@ -36,7 +37,72 @@ export class AnalyticsController {
     10,
   );
 
-  constructor(private readonly analyticsService: AnalyticsService) {}
+  constructor(
+    private readonly analyticsService: AnalyticsService,
+    private readonly topology: RabbitMqTopologyService,
+  ) {}
+
+  // ── Retry helpers ──
+
+  private readRetryCount(message: any): number {
+    const raw =
+      message?.properties?.headers?.["x-retry-count"] ?? 0;
+
+    const normalized = Buffer.isBuffer(raw)
+      ? raw.toString("utf8")
+      : raw;
+
+    const count = Number(normalized);
+
+    return Number.isFinite(count) && count >= 0
+      ? count
+      : 0;
+  }
+
+  private async routeProcessingFailure(
+    eventName: string,
+    envelope: any,
+    context: RmqContext,
+    error: unknown,
+  ): Promise<void> {
+    const channel = context.getChannelRef();
+    const originalMsg = context.getMessage();
+    const retryCount = this.readRetryCount(originalMsg);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unknown processing error";
+
+    try {
+      if (retryCount >= this.maxAttempts) {
+        await this.topology.publishToDlq(
+          eventName,
+          envelope,
+          retryCount,
+          message,
+        );
+      } else {
+        await this.topology.publishToRetry(
+          eventName,
+          envelope,
+          retryCount,
+          message,
+        );
+      }
+
+      // A cópia foi confirmada no retry/DLQ.
+      channel.ack(originalMsg);
+    } catch (routingError: any) {
+      this.logger.error(
+        `Could not route failed event ${eventName}: ` +
+          routingError.message,
+      );
+
+      // Não perder a mensagem caso o retry broker falhe.
+      channel.nack(originalMsg, false, true);
+    }
+  }
 
   // ── Event Handlers ──
 
@@ -77,9 +143,17 @@ export class AnalyticsController {
       channel.ack(originalMsg);
     } catch (error: any) {
       this.logger.error(
-        `profile.viewed.v1 error: ${error.message} (eventId=${envelope?.eventId})`,
+        `profile.viewed.v1 error: ${error.message} ` +
+          `(eventId=${envelope?.eventId}, ` +
+          `correlationId=${envelope?.correlationId})`,
       );
-      channel.nack(originalMsg, false, true);
+
+      await this.routeProcessingFailure(
+        "profile.viewed.v1",
+        envelope,
+        context,
+        error,
+      );
     }
   }
 
@@ -117,9 +191,17 @@ export class AnalyticsController {
       channel.ack(originalMsg);
     } catch (error: any) {
       this.logger.error(
-        `review.submitted.v1 error: ${error.message} (eventId=${envelope?.eventId})`,
+        `review.submitted.v1 error: ${error.message} ` +
+          `(eventId=${envelope?.eventId}, ` +
+          `correlationId=${envelope?.correlationId})`,
       );
-      channel.nack(originalMsg, false, true);
+
+      await this.routeProcessingFailure(
+        "review.submitted.v1",
+        envelope,
+        context,
+        error,
+      );
     }
   }
 
@@ -150,6 +232,7 @@ export class AnalyticsController {
         rating: envelope.payload.rating ?? 0,
         previousStatus: envelope.payload.previousStatus ?? "PUBLISHED",
         status: envelope.payload.status ?? "PUBLISHED",
+        originalSubmittedAt: envelope.payload.originalSubmittedAt,
         updatedAt: envelope.payload.updatedAt,
       });
 
@@ -160,9 +243,17 @@ export class AnalyticsController {
       channel.ack(originalMsg);
     } catch (error: any) {
       this.logger.error(
-        `review.updated.v1 error: ${error.message} (eventId=${envelope?.eventId})`,
+        `review.updated.v1 error: ${error.message} ` +
+          `(eventId=${envelope?.eventId}, ` +
+          `correlationId=${envelope?.correlationId})`,
       );
-      channel.nack(originalMsg, false, true);
+
+      await this.routeProcessingFailure(
+        "review.updated.v1",
+        envelope,
+        context,
+        error,
+      );
     }
   }
 
@@ -191,6 +282,7 @@ export class AnalyticsController {
         workerProfileId: envelope.payload.workerProfileId,
         rating: envelope.payload.rating ?? 0,
         previousStatus: envelope.payload.previousStatus ?? "PUBLISHED",
+        originalSubmittedAt: envelope.payload.originalSubmittedAt,
         removedAt: envelope.payload.removedAt,
       });
 
@@ -201,9 +293,17 @@ export class AnalyticsController {
       channel.ack(originalMsg);
     } catch (error: any) {
       this.logger.error(
-        `review.removed.v1 error: ${error.message} (eventId=${envelope?.eventId})`,
+        `review.removed.v1 error: ${error.message} ` +
+          `(eventId=${envelope?.eventId}, ` +
+          `correlationId=${envelope?.correlationId})`,
       );
-      channel.nack(originalMsg, false, true);
+
+      await this.routeProcessingFailure(
+        "review.removed.v1",
+        envelope,
+        context,
+        error,
+      );
     }
   }
 
@@ -233,6 +333,7 @@ export class AnalyticsController {
         rating: envelope.payload.rating ?? 0,
         previousStatus: envelope.payload.previousStatus ?? "PUBLISHED",
         status: envelope.payload.status ?? "HIDDEN",
+        originalSubmittedAt: envelope.payload.originalSubmittedAt,
         moderatedAt: envelope.payload.moderatedAt,
       });
 
@@ -243,9 +344,17 @@ export class AnalyticsController {
       channel.ack(originalMsg);
     } catch (error: any) {
       this.logger.error(
-        `review.moderated.v1 error: ${error.message} (eventId=${envelope?.eventId})`,
+        `review.moderated.v1 error: ${error.message} ` +
+          `(eventId=${envelope?.eventId}, ` +
+          `correlationId=${envelope?.correlationId})`,
       );
-      channel.nack(originalMsg, false, true);
+
+      await this.routeProcessingFailure(
+        "review.moderated.v1",
+        envelope,
+        context,
+        error,
+      );
     }
   }
 
@@ -283,9 +392,17 @@ export class AnalyticsController {
       channel.ack(originalMsg);
     } catch (error: any) {
       this.logger.error(
-        `contact.clicked.v1 error: ${error.message} (eventId=${envelope?.eventId})`,
+        `contact.clicked.v1 error: ${error.message} ` +
+          `(eventId=${envelope?.eventId}, ` +
+          `correlationId=${envelope?.correlationId})`,
       );
-      channel.nack(originalMsg, false, true);
+
+      await this.routeProcessingFailure(
+        "contact.clicked.v1",
+        envelope,
+        context,
+        error,
+      );
     }
   }
 
