@@ -7,19 +7,52 @@
 
 ## Evento de negócio (Business Event)
 
-Mensagem publicada de forma assíncrona via RabbitMQ quando algo relevante acontece na plataforma. O Analytics consome três tipos de evento:
+Mensagem publicada de forma assíncrona via RabbitMQ quando algo relevante acontece na plataforma. O Analytics consome seis tipos de evento:
 
 | Evento | Significado |
 |---|---|
 | **Visualização de perfil** | Um turista acessou a página de detalhes de um perfil comercial |
 | **Avaliação publicada** | Um turista publicou uma avaliação com nota e comentário |
+| **Avaliação atualizada** | Um turista editou sua avaliação (nota e/ou comentário) |
+| **Avaliação removida** | Um turista removeu sua própria avaliação |
+| **Avaliação moderada** | Um curador ocultou ou removeu uma avaliação |
 | **Contato acionado** | Um turista clicou no botão de WhatsApp ou telefone de um perfil |
 
 O Analytics **nunca escreve dados por API REST**. Toda escrita é feita exclusivamente pelo consumo de eventos.
 
+## Campos de eventos
+
+Os eventos de avaliação carregam metadados para correção temporal e idempotência:
+
+| Campo | Descrição |
+|---|---|
+| `originalSubmittedAt` | Data ISO da criação original da avaliação; usada para agregar a métrica no dia correto mesmo quando a edição/remoção/moderação ocorre depois |
+| `previousRating` | Nota anterior da avaliação (presente em `review.updated.v1`) |
+| `previousStatus` | Status anterior antes da transição |
+| `status` | Status atual após a transição |
+
 ## Idempotência (Idempotency)
 
-Propriedade que garante que um mesmo evento, se recebido mais de uma vez, não gere métricas duplicadas. Cada evento possui um identificador único (`eventId`), usado para detectar e ignorar duplicatas.
+Propriedade que garante que um mesmo evento, se recebido mais de uma vez, não gere métricas duplicadas. Cada evento possui um identificador único (`eventId`), usado para detectar e ignorar duplicatas. O incremento é atômico via pipeline do MongoDB que verifica `appliedEventIds` antes de aplicar deltas.
+
+## Retry e DLQ
+
+Eventos com falha de processamento passam por uma retry queue com TTL antes de retornarem à fila principal. Após esgotar as tentativas máximas (`MAX_RETRY_ATTEMPTS`, default 3), o evento é publicado na DLQ para inspeção manual.
+
+| Recurso | Nome default |
+|---|---|
+| Retry queue | `analytics.events.retry` |
+| DLQ | `analytics.events.dlq` |
+| Exchange de retry | `praieira.retry` |
+| DLX | `praieira.dlx` |
+
+## Variáveis de Ambiente
+
+| Variável | Default | Descrição |
+|---|---|---|
+| `MAX_RETRY_ATTEMPTS` | `3` | Número máximo de tentativas de reprocessamento antes da DLQ |
+| `RETRY_DELAY_MS` | `2000` | TTL da retry queue em milissegundos |
+| `OUTBOX_LEASE_TIMEOUT_MS` | `30000` | Tempo máximo em ms que um worker pode reter um evento da outbox antes de outro worker poder retomá-lo |
 
 ## Agregado diário (Daily Aggregate)
 

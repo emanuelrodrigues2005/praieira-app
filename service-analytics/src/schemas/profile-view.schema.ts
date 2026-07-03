@@ -5,17 +5,24 @@ export type ProfileViewDocument = ProfileView & Document;
 
 @Schema({ timestamps: true, collection: "profile_views" })
 export class ProfileView {
-  @Prop({ required: true })
-  profileId: string;
+  @Prop({
+    required: true,
+    unique: true,
+    index: true,
+  })
+  eventId!: string;
 
   @Prop({ required: true })
-  viewerRole: string;
+  profileId!: string;
 
   @Prop({ required: true })
-  beach: string;
+  viewerRole!: string;
 
   @Prop({ required: true })
-  timestamp: Date;
+  beach!: string;
+
+  @Prop({ required: true })
+  timestamp!: Date;
 }
 
 export const ProfileViewSchema = SchemaFactory.createForClass(ProfileView);
