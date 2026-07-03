@@ -25,6 +25,8 @@ import { CurrentUser } from "../common/auth/current-user.decorator";
 import { Public } from "../common/auth/public.decorator";
 import { AuthenticatedUser } from "../common/types/authenticated-user";
 import { Request } from "express";
+import { CORRELATION_ID_KEY } from "../common/correlation/correlation.middleware";
+import { SubmitProfileDto } from "./dto/submit-profile.dto";
 
 @ApiTags("Workers")
 @Controller("catalog/workers")
@@ -112,5 +114,26 @@ export class WorkersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     await this.workersService.delete(id, user.sub);
+  }
+
+  @Post("me/submit")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("WORKER")
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Submit own profile to curation" })
+  async submit(
+    @Body() dto: SubmitProfileDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
+  ) {
+    const correlationId =
+      (req as any)[CORRELATION_ID_KEY] || "";
+    const profile = await this.workersService.submit(
+      dto.profileId,
+      user.sub,
+      correlationId,
+    );
+    return { data: profile, meta: { requestId: correlationId } };
   }
 }

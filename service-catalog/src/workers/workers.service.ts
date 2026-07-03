@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { MessagingService } from "../messaging/messaging.service";
+import { OutboxRepository } from "../messaging/outbox.repository";
 import { CreateWorkerDto } from "./dto/create-worker.dto";
 import { UpdateWorkerDto } from "./dto/update-worker.dto";
 import { Prisma } from "@prisma/client";
@@ -21,6 +22,7 @@ export class WorkersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly messaging?: MessagingService,
+    private readonly outboxRepo?: OutboxRepository,
   ) {}
 
   async create(userId: string, dto: CreateWorkerDto) {
@@ -145,5 +147,52 @@ export class WorkersService {
     }
 
     return profile;
+  }
+
+  async submit(
+    profileId: string,
+    userId: string,
+    correlationId: string,
+  ) {
+    const profile = await this.prisma.workerProfile.findUnique({
+      where: { id: profileId },
+    });
+
+    if (!profile || profile.ownerUserId !== userId) {
+      throw new NotFoundException("Worker profile not found");
+    }
+
+    if (profile.status !== "DRAFT" && profile.status !== "REJECTED") {
+      throw new ConflictException(
+        "Only profiles with status DRAFT or REJECTED can be submitted for curation",
+      );
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.workerProfile.update({
+        where: { id: profileId },
+        data: { status: "PENDING" },
+      });
+
+      if (this.outboxRepo) {
+        await this.outboxRepo.create(
+          "worker.profile.submitted.v1",
+          {
+            profileId: profile.id,
+            ownerUserId: profile.ownerUserId,
+            workerName: profile.name,
+            beach: profile.beach,
+            category: profile.category,
+            submittedAt: new Date().toISOString(),
+          },
+          correlationId,
+          { userId, role: "WORKER" },
+        );
+      }
+
+      return updated;
+    });
+
+    return result;
   }
 }
