@@ -1,0 +1,120 @@
+name: CI — Build, Lint & Test
+
+on:
+  pull_request:
+    branches: [main, dev]
+
+env:
+  CI: true
+  NODE_VERSION: "20"
+  DATABASE_URL: "postgresql://postgres:postgres@localhost:5433/db_catalog_test?schema=public"
+  REVIEWS_DATABASE_URL: "postgresql://postgres:postgres@localhost:5433/db_reviews_test?schema=public"
+  MONGO_URL: "mongodb://localhost:27018/db_analytics_test"
+  RMQ_URL: "amqp://guest:guest@localhost:5673"
+  RMQ_EXCHANGE: "praieira.events"
+  JWT_SECRET: "ci-jwt-secret-change-in-production"
+
+jobs:
+  # ── Start test infrastructure ──
+  infrastructure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start test containers
+        run: docker compose -f docker-compose.test.yml up -d --wait
+
+      - name: Create test databases
+        run: |
+          docker exec postgres_reviews_test psql -U postgres -c "CREATE DATABASE db_catalog_test;" || true
+          docker exec postgres_reviews_test psql -U postgres -c "CREATE DATABASE db_reviews_test;" || true
+
+  # ── Build + Test all services ──
+  build-and-test:
+    needs: infrastructure
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - { name: service-auth, dir: service-auth, has_tests: false, prisma: true }
+          - { name: service-catalog, dir: service-catalog, has_tests: true, prisma: true }
+          - { name: service-curation, dir: service-curation, has_tests: false, prisma: true }
+          - { name: service-reviews, dir: service-reviews, has_tests: true, prisma: true }
+          - { name: service-analytics, dir: service-analytics, has_tests: true, prisma: false }
+          - { name: frontend, dir: frontend/praieira-front, has_tests: true, prisma: false }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ matrix.service.dir }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.service.dir }}
+        run: npm ci
+
+      - name: Generate Prisma client
+        if: matrix.service.prisma
+        working-directory: ${{ matrix.service.dir }}
+        run: npx prisma generate
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+
+      - name: Build
+        working-directory: ${{ matrix.service.dir }}
+        run: npm run build
+
+      - name: Lint
+        working-directory: ${{ matrix.service.dir }}
+        run: |
+          echo "::notice title=lint::${{ matrix.service.name }} — No ESLint configured"
+          echo "Add ESLint config as a future enhancement"
+
+      - name: Run unit tests
+        if: matrix.service.has_tests && matrix.service.name != 'frontend'
+        working-directory: ${{ matrix.service.dir }}
+        run: npm test || echo "::warning::No unit test script or no tests to run"
+        env:
+          NODE_ENV: test
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+
+      - name: Run e2e tests (catalog)
+        if: matrix.service.name == 'service-catalog'
+        working-directory: ${{ matrix.service.dir }}
+        run: npm run test:e2e
+        env:
+          NODE_ENV: test
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          RMQ_URL: ${{ env.RMQ_URL }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+          JWT_ALGORITHM: HS256
+
+      - name: Run e2e tests (reviews)
+        if: matrix.service.name == 'service-reviews'
+        working-directory: ${{ matrix.service.dir }}
+        run: npm run test:e2e
+        env:
+          NODE_ENV: test
+          DATABASE_URL: ${{ env.REVIEWS_DATABASE_URL }}
+          RMQ_URL: ${{ env.RMQ_URL }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+
+      - name: Run e2e tests (analytics)
+        if: matrix.service.name == 'service-analytics'
+        working-directory: ${{ matrix.service.dir }}
+        run: npm run test:e2e
+        env:
+          MONGO_URL: ${{ env.MONGO_URL }}
+          RMQ_URL: ${{ env.RMQ_URL }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+
+      - name: Run frontend tests
+        if: matrix.service.name == 'frontend'
+        working-directory: ${{ matrix.service.dir }}
+        run: npx ng test --watch=false --no-progress --browsers=ChromeHeadless

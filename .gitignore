@@ -34,6 +34,7 @@ Thumbs.db
 logs/
 *.log
 npm-debug.log*
+tmp/
 
 # Angular
 .angular/
