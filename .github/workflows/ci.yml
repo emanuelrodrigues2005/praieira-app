@@ -113,7 +113,7 @@ jobs:
           DATABASE_URL: ${{ env.DATABASE_URL }}
       - name: Run catalog e2e tests
         working-directory: service-catalog
-        run: npm run test:e2e
+        run: npx jest --config ./test/jest-e2e.json --no-cache
         env:
           NODE_ENV: test
           DATABASE_URL: ${{ env.DATABASE_URL }}
