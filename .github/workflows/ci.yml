@@ -141,6 +141,9 @@ jobs:
           JWT_SECRET: ${{ env.JWT_SECRET }}
 
       # ── service-analytics tests ──
+      - name: Install analytics dependencies
+        working-directory: service-analytics
+        run: npm ci
       - name: Run analytics e2e tests
         working-directory: service-analytics
         run: npm run test:e2e
