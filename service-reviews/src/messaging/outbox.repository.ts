@@ -95,16 +95,31 @@ export class OutboxRepository {
     );
   }
 
-  async claimPending(batchSize: number): Promise<OutboxRow[]> {
+  async claimPending(
+    batchSize: number,
+    leaseTimeoutMs: number,
+  ): Promise<OutboxRow[]> {
     return this.prisma.$queryRawUnsafe<OutboxRow[]>(
       `UPDATE outbox_events
        SET status = 'PROCESSING',
            locked_at = NOW(),
            locked_by = $1
        WHERE id IN (
-         SELECT id FROM outbox_events
-         WHERE (status = 'PENDING')
-           AND (next_attempt_at IS NULL OR next_attempt_at <= NOW())
+         SELECT id
+         FROM outbox_events
+         WHERE (
+           status = 'PENDING'
+           OR (
+             status = 'PROCESSING'
+             AND locked_at IS NOT NULL
+             AND locked_at <=
+               NOW() - ($3 * INTERVAL '1 millisecond')
+           )
+         )
+         AND (
+           next_attempt_at IS NULL
+           OR next_attempt_at <= NOW()
+         )
          ORDER BY occurred_at ASC
          LIMIT $2
          FOR UPDATE SKIP LOCKED
@@ -129,6 +144,7 @@ export class OutboxRepository {
          created_at AS "createdAt"`,
       this.instanceId,
       batchSize,
+      leaseTimeoutMs,
     );
   }
 
@@ -139,6 +155,7 @@ export class OutboxRepository {
            published_at = NOW(),
            locked_at = NULL,
            locked_by = NULL,
+           next_attempt_at = NULL,
            last_error = NULL
        WHERE id = $1`,
       id,

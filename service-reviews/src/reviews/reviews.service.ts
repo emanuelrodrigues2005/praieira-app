@@ -6,9 +6,10 @@ import {
   Inject,
   Logger,
   UnprocessableEntityException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
+import { randomUUID } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
-import { OutboxRepository } from "../messaging/outbox.repository";
 import { CATALOG_CLIENT, CatalogClient } from "../catalog/catalog-client.interface";
 import { CreateReviewDto } from "./dto/create-review.dto";
 import { UpdateReviewDto } from "./dto/update-review.dto";
@@ -27,7 +28,6 @@ export class ReviewsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly outboxRepo: OutboxRepository,
     @Inject(CATALOG_CLIENT) private readonly catalogClient: CatalogClient,
     private readonly correlationService: CorrelationService,
   ) {
@@ -66,7 +66,7 @@ export class ReviewsService {
 
         await tx.outboxEvent.create({
           data: {
-            id: correlationId,
+            id: randomUUID(),
             eventName: "review.submitted.v1",
             version: 1,
             occurredAt: new Date(),
@@ -251,7 +251,7 @@ export class ReviewsService {
 
         await tx.outboxEvent.create({
           data: {
-            id: correlationId + "-update",
+            id: randomUUID(),
             eventName: "review.updated.v1",
             version: 1,
             occurredAt: new Date(),
@@ -267,6 +267,7 @@ export class ReviewsService {
               previousStatus,
               status: r.status,
               hasComment: r.comment !== null,
+              originalSubmittedAt: r.createdAt.toISOString(),
               updatedAt: r.updatedAt.toISOString(),
             } as any,
             attempts: 0,
@@ -313,7 +314,7 @@ export class ReviewsService {
 
       await tx.outboxEvent.create({
         data: {
-          id: correlationId + "-remove",
+          id: randomUUID(),
           eventName: "review.removed.v1",
           version: 1,
           occurredAt: new Date(),
@@ -327,6 +328,7 @@ export class ReviewsService {
             rating: r.rating,
             previousStatus: review.status,
             status: "REMOVED",
+            originalSubmittedAt: r.createdAt.toISOString(),
             removedAt: r.deletedAt!.toISOString(),
           } as any,
           attempts: 0,
@@ -368,7 +370,7 @@ export class ReviewsService {
 
       await tx.outboxEvent.create({
         data: {
-          id: correlationId + "-moderate",
+          id: randomUUID(),
           eventName: "review.moderated.v1",
           version: 1,
           occurredAt: new Date(),
@@ -383,6 +385,7 @@ export class ReviewsService {
             status: r.status,
             moderatedByUserId: user.sub,
             reason: dto.reason,
+            originalSubmittedAt: r.createdAt.toISOString(),
             moderatedAt: r.moderatedAt!.toISOString(),
           } as any,
           attempts: 0,
@@ -422,7 +425,7 @@ export class ReviewsService {
         const correlationId = this.correlationService.getCorrelationId();
         await tx.outboxEvent.create({
           data: {
-            id: correlationId,
+            id: randomUUID(),
             eventName: "review.reported.v1",
             version: 1,
             occurredAt: new Date(),
@@ -479,10 +482,13 @@ export class ReviewsService {
       ) {
         throw error;
       }
-      this.logger.warn(
+      this.logger.error(
         `Catalog validation failed for profile ${workerProfileId}: ${error.message}`,
       );
-      // Allow creation even if catalog is unavailable (eventual consistency)
+      throw new ServiceUnavailableException(
+        "Catalog service unavailable. " +
+          "The worker profile could not be validated.",
+      );
     }
   }
 }

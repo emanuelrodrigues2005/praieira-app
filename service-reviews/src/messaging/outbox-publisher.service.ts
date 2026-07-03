@@ -11,6 +11,7 @@ export class OutboxPublisherService implements OnModuleDestroy {
   private running = false;
   private maxAttempts: number;
   private retryBaseDelay: number;
+  private readonly leaseTimeoutMs: number;
 
   constructor(
     private readonly outboxRepo: OutboxRepository,
@@ -22,6 +23,10 @@ export class OutboxPublisherService implements OnModuleDestroy {
     );
     this.retryBaseDelay = parseInt(
       process.env.OUTBOX_RETRY_BASE_DELAY_MS ?? "2000",
+      10,
+    );
+    this.leaseTimeoutMs = parseInt(
+      process.env.OUTBOX_LEASE_TIMEOUT_MS ?? "30000",
       10,
     );
   }
@@ -52,7 +57,10 @@ export class OutboxPublisherService implements OnModuleDestroy {
 
     try {
       // Claim events atomically
-      const events = await this.outboxRepo.claimPending(batchSize);
+      const events = await this.outboxRepo.claimPending(
+        batchSize,
+        this.leaseTimeoutMs,
+      );
       for (const event of events) {
         await this.publishOne(event);
       }
