@@ -11,6 +11,7 @@ import { PrismaModule } from "./prisma/prisma.module";
 import { MessagingModule } from "./messaging/messaging.module";
 import { WorkersModule } from "./workers/workers.module";
 import { ServicesModule } from "./services/services.module";
+import { CurationEventsModule } from "./curation-events/curation-events.module";
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { ServicesModule } from "./services/services.module";
     MessagingModule,
     WorkersModule,
     ServicesModule,
+    CurationEventsModule,
   ],
   controllers: [AppController],
   providers: [
