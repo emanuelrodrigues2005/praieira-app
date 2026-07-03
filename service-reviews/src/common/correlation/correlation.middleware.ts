@@ -16,8 +16,12 @@ declare global {
 @Injectable()
 export class CorrelationMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
+    const received = req.headers[CORRELATION_ID_HEADER];
+    const providedId = typeof received === "string" ? received.trim() : "";
     const correlationId =
-      (req.headers[CORRELATION_ID_HEADER] as string) || randomUUID();
+      providedId.length > 0 && providedId.length <= 100
+        ? providedId
+        : randomUUID();
     req.headers[CORRELATION_ID_HEADER] = correlationId;
     req[CORRELATION_ID_KEY] = correlationId;
     res.setHeader(CORRELATION_ID_HEADER, correlationId);
