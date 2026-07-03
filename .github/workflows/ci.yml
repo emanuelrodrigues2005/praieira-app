@@ -103,9 +103,12 @@ jobs:
           PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE db_reviews_test;" || true
 
       # ── service-catalog tests ──
+      - name: Install catalog dependencies
+        working-directory: service-catalog
+        run: npm ci
       - name: Push Prisma schema (catalog)
         working-directory: service-catalog
-        run: npx prisma db push --skip-generate
+        run: ./node_modules/.bin/prisma db push --skip-generate
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
       - name: Run catalog e2e tests
@@ -118,9 +121,12 @@ jobs:
           JWT_SECRET: ${{ env.JWT_SECRET }}
 
       # ── service-reviews tests ──
+      - name: Install reviews dependencies
+        working-directory: service-reviews
+        run: npm ci
       - name: Push Prisma schema (reviews)
         working-directory: service-reviews
-        run: npx prisma db push --skip-generate
+        run: ./node_modules/.bin/prisma db push --skip-generate
         env:
           DATABASE_URL: ${{ env.REVIEWS_DATABASE_URL }}
       - name: Run reviews e2e tests
