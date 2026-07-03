@@ -107,3 +107,12 @@ model OutboxEvent {
   @@index([status, nextAttemptAt])
   @@map("outbox_events")
 }
+
+model NotificationPreference {
+  id          String   @id @default(uuid())
+  userId      String   @unique @map("user_id")
+  preferences Json     @default("{}")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("notification_preferences")
+}
