@@ -1,6 +1,8 @@
 import { Module } from "@nestjs/common";
 import { ClientsModule, Transport } from "@nestjs/microservices";
 import { MessagingService } from "./messaging.service";
+import { OutboxRepository } from "./outbox.repository";
+import { OutboxPublisherService } from "./outbox-publisher.service";
 
 @Module({
   imports: [
@@ -25,7 +27,7 @@ import { MessagingService } from "./messaging.service";
       },
     ]),
   ],
-  providers: [MessagingService],
-  exports: [MessagingService],
+  providers: [MessagingService, OutboxRepository, OutboxPublisherService],
+  exports: [MessagingService, OutboxRepository, OutboxPublisherService],
 })
 export class MessagingModule {}

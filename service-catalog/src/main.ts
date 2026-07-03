@@ -3,6 +3,7 @@ import { NestFactory } from "@nestjs/core";
 import { ValidationPipe, Logger } from "@nestjs/common";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
 import { AppModule } from "./app.module";
+import { OutboxPublisherService } from "./messaging/outbox-publisher.service";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -29,6 +30,15 @@ async function bootstrap() {
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup("api", app, document);
+
+  // Start outbox publisher
+  const publisher = app.get(OutboxPublisherService);
+  const pollInterval = parseInt(
+    process.env.OUTBOX_POLL_INTERVAL_MS ?? "1000",
+    10,
+  );
+  const batchSize = parseInt(process.env.OUTBOX_BATCH_SIZE ?? "20", 10);
+  publisher.start(pollInterval, batchSize);
 
   const port = parseInt(process.env.PORT ?? "3002", 10);
   await app.listen(port);
