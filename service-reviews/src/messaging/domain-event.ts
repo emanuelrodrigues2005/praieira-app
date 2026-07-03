@@ -25,8 +25,12 @@ export interface ReviewUpdatedPayload {
   reviewId: string;
   workerProfileId: string;
   touristUserId: string;
+  previousRating: number;
   rating: number;
+  previousStatus: string;
+  status: string;
   hasComment: boolean;
+  originalSubmittedAt: string;
   updatedAt: string;
 }
 
@@ -34,14 +38,22 @@ export interface ReviewRemovedPayload {
   reviewId: string;
   workerProfileId: string;
   touristUserId: string;
+  rating: number;
+  previousStatus: string;
+  status: string;
+  originalSubmittedAt: string;
   removedAt: string;
 }
 
 export interface ReviewModeratedPayload {
   reviewId: string;
   workerProfileId: string;
+  rating: number;
+  previousStatus: string;
+  status: string;
   moderatedByUserId: string;
   reason: string;
+  originalSubmittedAt: string;
   moderatedAt: string;
 }
 
