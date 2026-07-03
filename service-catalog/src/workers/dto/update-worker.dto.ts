@@ -3,11 +3,16 @@ import {
   IsOptional,
   IsNumber,
   IsNotEmpty,
+  IsArray,
+  IsUrl,
+  IsObject,
   Min,
   Max,
   MinLength,
   MaxLength,
+  ArrayMaxSize,
 } from "class-validator";
+import { ValidateBusinessHours } from "./validate-business-hours";
 
 export class UpdateWorkerDto {
   @IsOptional()
@@ -51,4 +56,28 @@ export class UpdateWorkerDto {
   @IsString()
   @IsNotEmpty()
   beach?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsUrl()
+  coverImage?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @IsUrl({}, { each: true })
+  @ArrayMaxSize(10)
+  gallery?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(50, { each: true })
+  @ArrayMaxSize(10)
+  tags?: string[];
+
+  @IsOptional()
+  @IsObject()
+  @ValidateBusinessHours()
+  businessHours?: Record<string, { open: string; close: string }>;
 }

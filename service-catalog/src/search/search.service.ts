@@ -12,6 +12,10 @@ export interface WorkerProfileSearchResult {
   phone: string | null;
   whatsapp: string | null;
   description: string | null;
+  coverImage: string | null;
+  gallery: string[];
+  tags: string[];
+  businessHours: Record<string, { open: string; close: string }> | null;
   distance?: number;
 }
 
@@ -105,7 +109,8 @@ export class SearchService {
     const orderBy = hasLat && hasLng ? "distance ASC" : "created_at DESC";
 
     const rows = await this.prisma.$queryRawUnsafe<WorkerProfileSearchResult[]>(
-      `SELECT id, name, category, beach, latitude, longitude, phone, whatsapp, description${geoSelect}
+      `SELECT id, name, category, beach, latitude, longitude, phone, whatsapp, description,
+              cover_image as "coverImage", gallery, tags, business_hours as "businessHours"${geoSelect}
        FROM worker_profiles
        WHERE ${whereClause}
        ORDER BY ${orderBy}
