@@ -8,6 +8,7 @@ import { JwtStrategy } from "./common/auth/jwt.strategy";
 import { HttpExceptionFilter } from "./common/errors/http-exception.filter";
 import { CorrelationMiddleware } from "./common/correlation/correlation.middleware";
 import { PrismaModule } from "./prisma/prisma.module";
+import { MessagingModule } from "./messaging/messaging.module";
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { PrismaModule } from "./prisma/prisma.module";
       },
     }),
     PrismaModule,
+    MessagingModule,
   ],
   controllers: [AppController],
   providers: [
