@@ -88,6 +88,10 @@ services:
       PORT: "3002"
       DATABASE_URL: "postgresql://postgres:postgres@postgres_db:5432/db_catalog?schema=public"
       RMQ_URL: "amqp://guest:guest@rabbitmq:5672"
+      RMQ_EXCHANGE: "praieira.events"
+      JWT_SECRET: "dev-jwt-secret-change-in-production"
+      JWT_ALGORITHM: "HS256"
+      CORS_ORIGIN: "http://localhost:4200"
     depends_on:
       postgres_db:
         condition: service_healthy
