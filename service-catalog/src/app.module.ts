@@ -12,6 +12,7 @@ import { MessagingModule } from "./messaging/messaging.module";
 import { WorkersModule } from "./workers/workers.module";
 import { ServicesModule } from "./services/services.module";
 import { CurationEventsModule } from "./curation-events/curation-events.module";
+import { SearchModule } from "./search/search.module";
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { CurationEventsModule } from "./curation-events/curation-events.module";
     WorkersModule,
     ServicesModule,
     CurationEventsModule,
+    SearchModule,
   ],
   controllers: [AppController],
   providers: [
