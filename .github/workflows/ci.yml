@@ -101,6 +101,8 @@ jobs:
           sleep 3
           PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE db_catalog_test;" || true
           PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE db_reviews_test;" || true
+          PGPASSWORD=postgres psql -h localhost -U postgres -d db_catalog_test -c "CREATE EXTENSION IF NOT EXISTS postgis;" || true
+          PGPASSWORD=postgres psql -h localhost -U postgres -d db_reviews_test -c "CREATE EXTENSION IF NOT EXISTS postgis;" || true
 
       # ── service-catalog tests ──
       - name: Install catalog dependencies
