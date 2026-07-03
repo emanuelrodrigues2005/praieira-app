@@ -28,3 +28,22 @@ services:
       interval: 2s
       timeout: 2s
       retries: 30
+
+  mongo_analytics_test:
+    image: mongo:7.0
+    container_name: mongo_analytics_test
+    environment:
+      MONGO_INITDB_DATABASE: db_analytics_test
+    ports:
+      - "27018:27017"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--eval",
+          "db.adminCommand('ping')",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 30
