@@ -1,10 +1,11 @@
-import { Controller, Post, Get, Delete, Body, UseGuards, Inject, HttpCode, HttpStatus } from "@nestjs/common";
+import { Controller, Post, Patch, Get, Delete, Body, UseGuards, Inject, HttpCode, HttpStatus } from "@nestjs/common";
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from "@nestjs/swagger";
 import { AuthService } from "./auth.service";
 import { RegisterDto } from "./dto/register.dto";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
 import { LogoutDto } from "./dto/logout.dto";
+import { ChangePasswordDto } from "./dto/change-password.dto";
 import { JwtAuthGuard } from "../common/auth/jwt-auth.guard";
 import { CurrentUser } from "../common/auth/current-user.decorator";
 import { AuthenticatedUser } from "../common/types/authenticated-user";
@@ -88,6 +89,25 @@ export class AuthController {
       data: result,
       meta: {
         requestId: this.request[CORRELATION_ID_KEY] || "system",
+      },
+    };
+  }
+
+  @Patch("me/password")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Change own user password" })
+  async changePassword(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ChangePasswordDto,
+  ): Promise<SuccessResponse<any>> {
+    const correlationId = this.request[CORRELATION_ID_KEY] || "system";
+    const result = await this.authService.changePassword(user.sub, dto);
+    return {
+      data: result,
+      meta: {
+        requestId: correlationId,
       },
     };
   }
