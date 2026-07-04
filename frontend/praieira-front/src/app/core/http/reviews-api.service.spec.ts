@@ -115,4 +115,25 @@ describe('ReviewsApiService', () => {
     expect(req.request.method).toBe('DELETE');
     req.flush(null);
   });
+
+  // ── createReview ──
+
+  it('should create a new review for a worker profile', () => {
+    const workerId = 'w1';
+    const body = { rating: 5, comment: 'Excelente!' };
+
+    service.createReview(workerId, body).subscribe((res) => {
+      expect(res.data.rating).toBe(5);
+      expect(res.data.comment).toBe('Excelente!');
+      expect(res.data.workerProfileId).toBe(workerId);
+    });
+
+    const req = httpMock.expectOne(`/reviews`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ workerProfileId: workerId, ...body });
+    req.flush({
+      data: { id: 'r2', workerProfileId: workerId, touristUserId: 't1', touristName: null, rating: 5, comment: 'Excelente!', status: 'PUBLISHED', createdAt: '2026-06-20T00:00:00Z', updatedAt: '2026-06-20T00:00:00Z' },
+      meta: { requestId: 'req-2' },
+    });
+  });
 });

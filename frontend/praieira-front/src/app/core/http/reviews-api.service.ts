@@ -41,6 +41,13 @@ export class ReviewsApiService {
     return this.http.get<PaginatedResponse<Review>>(`/reviews/me`, { params });
   }
 
+  createReview(workerId: string, body: { rating: number; comment?: string }): Observable<{ data: Review; meta: { requestId: string } }> {
+    return this.http.post<{ data: Review; meta: { requestId: string } }>(
+      `/reviews`,
+      { workerProfileId: workerId, ...body },
+    );
+  }
+
   updateReview(id: string, body: { rating?: number; comment?: string }): Observable<{ data: Review; meta: { requestId: string } }> {
     return this.http.patch<{ data: Review; meta: { requestId: string } }>(`/reviews/${id}`, body);
   }

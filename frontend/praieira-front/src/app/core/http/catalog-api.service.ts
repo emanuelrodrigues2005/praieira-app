@@ -23,6 +23,8 @@ export interface WorkerProfileSearchResult {
   tags: string[];
   businessHours: Record<string, { open: string; close: string }> | null;
   distance?: number;
+  averageRating?: number;
+  totalReviews?: number;
 }
 
 export interface PaginationMeta {
