@@ -20,6 +20,13 @@ export interface WorkerProfile {
   rejectedReason?: string | null;
   reviewedBy?: string | null;
   reviewedAt?: string | null;
+  coverImage?: string | null;
+  gallery: string[];
+  tags: string[];
+  businessHours?: Record<string, { open: string; close: string }> | null;
+  averageRating?: number;
+  totalReviews?: number;
+  services?: ServiceItem[];
   createdAt: string;
   updatedAt: string;
 }
@@ -43,11 +50,14 @@ export interface Review {
   id: string;
   workerProfileId: string;
   touristUserId: string;
+  touristName?: string | null;
   rating: number;
   comment?: string | null;
   status: 'PUBLISHED' | 'HIDDEN' | 'REMOVED';
   createdAt: string;
   updatedAt: string;
+  /** Flattened from the backend response for the My Reviews endpoint */
+  establishmentName?: string;
 }
 
 export interface ReviewSummary {

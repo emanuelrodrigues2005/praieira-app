@@ -4,14 +4,24 @@ import { RoleGuard } from './core/guards/role.guard';
 import { AppShellComponent } from './core/layout/app-shell.component';
 
 export const routes: Routes = [
+  // Public routes — no shell (no sidebar)
+  {
+    path: 'login',
+    loadComponent: () => import('./features/auth/login.component').then(m => m.LoginComponent),
+  },
+  {
+    path: 'cadastro',
+    loadComponent: () => import('./features/auth/register.component').then(m => m.RegisterComponent),
+  },
+
+  // Authenticated routes — wrapped in AppShell
   {
     path: '',
     component: AppShellComponent,
+    canActivate: [AuthGuard],
     children: [
       { path: '', loadComponent: () => import('./features/home/home.component').then(m => m.HomeComponent) },
-      { path: 'login', loadComponent: () => import('./features/auth/login.component').then(m => m.LoginComponent) },
-      { path: 'cadastro', loadComponent: () => import('./features/auth/register.component').then(m => m.RegisterComponent) },
-      { path: 'explorar', loadComponent: () => import('./features/catalog/search.component').then(m => m.SearchComponent) },
+      { path: 'explorar', loadComponent: () => import('./features/catalog/search-page.component').then(m => m.SearchPageComponent) },
       { path: 'explorar/mapa', loadComponent: () => import('./features/catalog/map.component').then(m => m.MapComponent) },
       { path: 'perfil/:id', loadComponent: () => import('./features/worker-profile/worker-detail.component').then(m => m.WorkerDetailComponent) },
       { path: 'perfil/:id/avaliar', loadComponent: () => import('./features/reviews/review-form.component').then(m => m.ReviewFormComponent), canActivate: [AuthGuard, RoleGuard], data: { role: 'TOURIST' } },
