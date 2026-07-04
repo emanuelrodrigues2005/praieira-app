@@ -527,12 +527,12 @@ export class ReviewsService {
       if (!profile) {
         throw new NotFoundException("Worker profile not found");
       }
-      if (profile.publicationStatus !== "APPROVED") {
+      if (profile.status !== "APPROVED") {
         throw new UnprocessableEntityException(
           "Worker profile is not available for reviews",
         );
       }
-      if (!profile.isActive) {
+      if (profile.isActive === false) {
         throw new UnprocessableEntityException("Worker profile is not active");
       }
     } catch (error: any) {

@@ -2,6 +2,7 @@ import { createServer, IncomingMessage, ServerResponse } from "http";
 
 export interface FakeCatalogProfile {
   id: string;
+  name?: string;
   publicationStatus: "APPROVED" | "PENDING" | "REJECTED";
   isActive: boolean;
   whatsapp?: string;

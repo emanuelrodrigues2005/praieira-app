@@ -92,6 +92,7 @@ services:
       JWT_SECRET: "dev-jwt-secret-change-in-production"
       JWT_ALGORITHM: "HS256"
       CORS_ORIGIN: "http://localhost:4200"
+      REVIEWS_URL: "http://service-reviews:3003"
     depends_on:
       postgres_db:
         condition: service_healthy
@@ -115,12 +116,8 @@ services:
       JWT_ALGORITHM: "HS256"
       RMQ_URL: "amqp://guest:guest@rabbitmq:5672"
       RMQ_EXCHANGE: "praieira.events"
-      CATALOG_MODE: "stub"
-      STUB_WORKER_PROFILE_ID: "10000000-0000-4000-8000-000000000001"
-      STUB_WORKER_PROFILE_STATUS: "APPROVED"
-      STUB_WORKER_PROFILE_ACTIVE: "true"
-      STUB_WORKER_WHATSAPP: "5581999999999"
-      STUB_WORKER_PHONE: "5581812345678"
+      CATALOG_MODE: "http"
+      CATALOG_URL: "http://service-catalog:3002"
       OUTBOX_POLL_INTERVAL_MS: "1000"
       OUTBOX_BATCH_SIZE: "20"
       OUTBOX_MAX_ATTEMPTS: "10"

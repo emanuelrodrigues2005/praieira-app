@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   ConflictException,
+  Logger,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { MessagingService } from "../messaging/messaging.service";
@@ -19,11 +20,17 @@ const workerProfileInclude = {
 
 @Injectable()
 export class WorkersService {
+  private readonly logger = new Logger(WorkersService.name);
+  private readonly reviewsBaseUrl: string;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly messaging?: MessagingService,
     private readonly outboxRepo?: OutboxRepository,
-  ) {}
+  ) {
+    this.reviewsBaseUrl =
+      process.env.REVIEWS_URL ?? "http://localhost:3003";
+  }
 
   async create(userId: string, dto: CreateWorkerDto) {
     return this.prisma.workerProfile.create({
@@ -65,15 +72,44 @@ export class WorkersService {
 
     // Owner can see any status
     if (currentUserId && profile.ownerUserId === currentUserId) {
-      return profile;
+      return this.attachRatings(profile);
     }
 
     // Non-owner / unauthenticated can only see APPROVED
     if (profile.status === "APPROVED") {
-      return profile;
+      return this.attachRatings(profile);
     }
 
     return null;
+  }
+
+  private async attachRatings(profile: any) {
+    try {
+      const url = `${this.reviewsBaseUrl}/reviews/worker/${profile.id}/summary`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2000);
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: { Accept: "application/json" },
+      });
+      clearTimeout(timeout);
+
+      if (response.ok) {
+        const body = await response.json();
+        const summary = body.data;
+        return {
+          ...profile,
+          averageRating: summary.averageRating ?? 0,
+          totalReviews: summary.totalReviews ?? 0,
+        };
+      }
+    } catch (error: any) {
+      this.logger.warn(
+        `Failed to fetch ratings for profile ${profile.id}: ${error.message}`,
+      );
+    }
+
+    return { ...profile, averageRating: 0, totalReviews: 0 };
   }
 
   async update(profileId: string, userId: string, dto: UpdateWorkerDto) {

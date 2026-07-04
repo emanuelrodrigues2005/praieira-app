@@ -3,6 +3,7 @@ import {
   IsString,
   IsInt,
   IsNumber,
+  IsIn,
   Min,
   Max,
   MaxLength,
@@ -40,9 +41,14 @@ export class SearchQueryDto {
   @IsOptional()
   @IsInt()
   @Min(1)
-  @Max(100_000)
+  @Max(500)
   @Type(() => Number)
   radius?: number;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["proximity", "rating"])
+  sort?: "proximity" | "rating" = "proximity";
 
   @IsOptional()
   @IsInt()
