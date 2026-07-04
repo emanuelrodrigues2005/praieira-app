@@ -1,0 +1,161 @@
+name: CI — Build, Lint & Test
+
+on:
+  pull_request:
+    branches: [main, dev]
+
+env:
+  CI: true
+  NODE_VERSION: "20"
+  DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/db_catalog_test?schema=public"
+  REVIEWS_DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/db_reviews_test?schema=public"
+  MONGO_URL: "mongodb://localhost:27017/db_analytics_test"
+  RMQ_URL: "amqp://guest:guest@localhost:5672"
+  RMQ_EXCHANGE: "praieira.events"
+  JWT_SECRET: "ci-jwt-secret-change-in-production"
+  JWT_ALGORITHM: "HS256"
+
+jobs:
+  # ── Build all services in parallel ──
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - { name: service-auth, dir: service-auth, prisma: true }
+          - { name: service-catalog, dir: service-catalog, prisma: true }
+          - { name: service-curation, dir: service-curation, prisma: true }
+          - { name: service-reviews, dir: service-reviews, prisma: true }
+          - { name: service-analytics, dir: service-analytics, prisma: false }
+          - { name: frontend, dir: frontend/praieira-front, prisma: false }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ matrix.service.dir }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.service.dir }}
+        run: npm ci
+
+      - name: Generate Prisma client
+        if: matrix.service.prisma
+        working-directory: ${{ matrix.service.dir }}
+        run: npx prisma generate
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+
+      - name: Build
+        working-directory: ${{ matrix.service.dir }}
+        run: npm run build
+
+      - name: Lint notice
+        working-directory: ${{ matrix.service.dir }}
+        run: |
+          echo "::notice title=lint::${{ matrix.service.name }} — No ESLint configured"
+          echo "Add ESLint config as a future enhancement"
+
+  # ── Test all services sequentially on the same runner with infra ──
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:15-3.3-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+      rabbitmq:
+        image: rabbitmq:3-management-alpine
+        ports:
+          - 5672:5672
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Create test databases
+        run: |
+          sleep 3
+          PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE db_catalog_test;" || true
+          PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE db_reviews_test;" || true
+          PGPASSWORD=postgres psql -h localhost -U postgres -d db_catalog_test -c "CREATE EXTENSION IF NOT EXISTS postgis;" || true
+          PGPASSWORD=postgres psql -h localhost -U postgres -d db_reviews_test -c "CREATE EXTENSION IF NOT EXISTS postgis;" || true
+
+      # ── service-catalog tests ──
+      - name: Install catalog dependencies
+        working-directory: service-catalog
+        run: npm ci
+      - name: Push Prisma schema (catalog)
+        working-directory: service-catalog
+        run: ./node_modules/.bin/prisma db push --skip-generate
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+      - name: Run catalog e2e tests
+        working-directory: service-catalog
+        run: npx jest --config ./test/jest-e2e.json --no-cache
+        env:
+          NODE_ENV: test
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          RMQ_URL: ${{ env.RMQ_URL }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+
+      # ── service-reviews tests ──
+      - name: Install reviews dependencies
+        working-directory: service-reviews
+        run: npm ci
+      - name: Push Prisma schema (reviews)
+        working-directory: service-reviews
+        run: ./node_modules/.bin/prisma db push --skip-generate
+        env:
+          DATABASE_URL: ${{ env.REVIEWS_DATABASE_URL }}
+      - name: Run reviews e2e tests
+        working-directory: service-reviews
+        run: npx jest --config ./test/jest-e2e.json --forceExit
+        env:
+          NODE_ENV: test
+          DATABASE_URL: ${{ env.REVIEWS_DATABASE_URL }}
+          RMQ_URL: ${{ env.RMQ_URL }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+
+      # ── service-analytics tests ──
+      - name: Install analytics dependencies
+        working-directory: service-analytics
+        run: npm ci
+      - name: Run analytics e2e tests
+        working-directory: service-analytics
+        run: npm run test:e2e
+        env:
+          MONGO_URL: ${{ env.MONGO_URL }}
+          RMQ_URL: ${{ env.RMQ_URL }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+
+      # ── frontend tests ──
+      - name: Install frontend dependencies
+        working-directory: frontend/praieira-front
+        run: npm ci
+      - name: Run frontend tests
+        working-directory: frontend/praieira-front
+        run: npx ng test --watch=false --no-progress

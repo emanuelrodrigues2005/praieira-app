@@ -2,16 +2,16 @@
 set -e
 
 echo "==> Aguardando PostgreSQL ficar pronto..."
-until npx prisma db push --skip-generate 2>/dev/null; do
+attempt=0
+until npx prisma migrate deploy; do
+  attempt=$((attempt + 1))
+  if [ "$attempt" -ge 30 ]; then
+    echo "ERROR: Could not apply migrations after $attempt attempts. Exiting."
+    exit 1
+  fi
   echo "   PostgreSQL ainda não está pronto — aguardando 2s..."
   sleep 2
 done
-
-echo "==> Aplicando schema no banco (migrate ou db push)..."
-npx prisma migrate deploy 2>/dev/null || {
-  echo "   Nenhuma migration encontrada — usando prisma db push..."
-  npx prisma db push
-}
 
 echo "==> Iniciando aplicação..."
 exec node dist/main

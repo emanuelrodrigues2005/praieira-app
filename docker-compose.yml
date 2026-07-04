@@ -38,7 +38,7 @@ services:
       - hub_network
 
   mongo_db:
-    image: mongo:latest
+    image: mongo:7.0
     container_name: mongo_db
     ports:
       - "27017:27017"
@@ -88,6 +88,11 @@ services:
       PORT: "3002"
       DATABASE_URL: "postgresql://postgres:postgres@postgres_db:5432/db_catalog?schema=public"
       RMQ_URL: "amqp://guest:guest@rabbitmq:5672"
+      RMQ_EXCHANGE: "praieira.events"
+      JWT_SECRET: "dev-jwt-secret-change-in-production"
+      JWT_ALGORITHM: "HS256"
+      CORS_ORIGIN: "http://localhost:4200"
+      REVIEWS_URL: "http://service-reviews:3003"
     depends_on:
       postgres_db:
         condition: service_healthy
@@ -107,7 +112,20 @@ services:
       NODE_ENV: development
       PORT: "3003"
       DATABASE_URL: "postgresql://postgres:postgres@postgres_db:5432/db_reviews?schema=public"
+      JWT_SECRET: "dev-jwt-secret-change-in-production"
+      JWT_ALGORITHM: "HS256"
       RMQ_URL: "amqp://guest:guest@rabbitmq:5672"
+      RMQ_EXCHANGE: "praieira.events"
+      CATALOG_MODE: "http"
+      CATALOG_URL: "http://service-catalog:3002"
+      OUTBOX_POLL_INTERVAL_MS: "1000"
+      OUTBOX_BATCH_SIZE: "20"
+      OUTBOX_MAX_ATTEMPTS: "10"
+      OUTBOX_RETRY_BASE_DELAY_MS: "2000"
+      OUTBOX_LEASE_TIMEOUT_MS: "30000"
+      REVIEW_COMMENT_MAX_LENGTH: "1000"
+      REVIEW_EDIT_WINDOW_HOURS: "24"
+      CORS_ORIGIN: "http://localhost:4200"
     depends_on:
       postgres_db:
         condition: service_healthy
@@ -147,7 +165,19 @@ services:
       NODE_ENV: development
       PORT: "3005"
       MONGO_URL: "mongodb://mongo_db:27017/db_analytics"
+      JWT_SECRET: "dev-jwt-secret-change-in-production"
+      JWT_ALGORITHM: "HS256"
       RMQ_URL: "amqp://guest:guest@rabbitmq:5672"
+      RMQ_EXCHANGE: "praieira.events"
+      RMQ_QUEUE: "analytics.events"
+      RMQ_RETRY_EXCHANGE: "praieira.retry"
+      RMQ_RETRY_QUEUE: "analytics.events.retry"
+      RMQ_DLX: "praieira.dlx"
+      RMQ_DLQ: "analytics.events.dlq"
+      MAX_RETRY_ATTEMPTS: "3"
+      RETRY_DELAY_MS: "2000"
+      CORS_ORIGIN: "http://localhost:4200"
+      CATALOG_URL: "http://service-catalog:3002"
     depends_on:
       mongo_db:
         condition: service_healthy

@@ -11,16 +11,108 @@ enum CurationStatus {
   PENDING
   APPROVED
   REJECTED
+  CANCELLED
 }
 
 model CurationRequest {
-  id          String         @id @default(uuid())
-  profileId   String         @map("profile_id")
-  status      CurationStatus @default(PENDING)
-  reviewerId  String?        @map("reviewer_id")
-  notes       String?
-  createdAt   DateTime       @default(now()) @map("created_at")
-  updatedAt   DateTime       @updatedAt @map("updated_at")
+  id              String          @id @default(uuid())
+  workerProfileId String          @map("worker_profile_id")
+  ownerUserId     String          @map("owner_user_id")
+  status          CurationStatus  @default(PENDING)
+  reviewerUserId  String?         @map("reviewer_user_id")
+  reasonCode      String?         @map("reason_code")
+  notes           String?
+  sourceEventId   String          @unique @map("source_event_id")
+  decidedAt       DateTime?       @map("decided_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  history         CurationHistory[]
 
+  @@index([status, createdAt])
+  @@index([workerProfileId])
   @@map("curation_requests")
+}
+
+model CurationHistory {
+  id          String   @id @default(uuid())
+  requestId   String   @map("request_id")
+  fromStatus  String?  @map("from_status")
+  toStatus    String   @map("to_status")
+  actorUserId String?  @map("actor_user_id")
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  request     CurationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@map("curation_history")
+}
+
+model ModerationAlert {
+  id              String   @id @default(uuid())
+  type            String
+  workerProfileId String   @map("worker_profile_id")
+  sourceEventId   String   @unique @map("source_event_id")
+  severity        String
+  status          String   @default("OPEN")
+  payload         Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  resolvedAt      DateTime? @map("resolved_at")
+
+  @@index([status, severity])
+  @@map("moderation_alerts")
+}
+
+model Notification {
+  id              String   @id @default(uuid())
+  recipientUserId String   @map("recipient_user_id")
+  type            String
+  title           String
+  message         String
+  channel         String   @default("IN_APP")
+  status          String   @default("PENDING")
+  readAt          DateTime? @map("read_at")
+  sentAt          DateTime? @map("sent_at")
+  sourceEventId   String?  @unique @map("source_event_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([recipientUserId, readAt, createdAt])
+  @@map("notifications")
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  PUBLISHED
+  DEAD
+}
+
+model OutboxEvent {
+  id             String        @id
+  eventName      String        @map("event_name")
+  version        Int           @default(1)
+  occurredAt     DateTime      @default(now()) @map("occurred_at")
+  correlationId  String        @map("correlation_id")
+  producer       String        @default("service-curation")
+  actor          Json?
+  payload        Json
+  status         OutboxStatus  @default(PENDING)
+  attempts       Int           @default(0)
+  lockedAt       DateTime?     @map("locked_at")
+  lockedBy       String?       @map("locked_by")
+  nextAttemptAt  DateTime?     @map("next_attempt_at")
+  publishedAt    DateTime?     @map("published_at")
+  failedAt       DateTime?     @map("failed_at")
+  lastError      String?       @db.Text @map("last_error")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  @@index([status, nextAttemptAt])
+  @@map("outbox_events")
+}
+
+model NotificationPreference {
+  id          String   @id @default(uuid())
+  userId      String   @unique @map("user_id")
+  preferences Json     @default("{}")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("notification_preferences")
 }

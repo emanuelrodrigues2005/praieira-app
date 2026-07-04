@@ -1,5 +1,5 @@
 # ========== Builder stage ==========
-FROM node:20-alpine AS builder
+FROM node:20-bookworm-slim AS builder
 
 WORKDIR /app
 
@@ -17,9 +17,12 @@ COPY src/ ./src/
 RUN npm run build
 
 # ========== Runner stage ==========
-FROM node:20-alpine AS runner
+FROM node:20-bookworm-slim AS runner
 
 WORKDIR /app
+
+# Install OpenSSL for Prisma engine compatibility
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/node_modules/.prisma /app/node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma /app/node_modules/@prisma

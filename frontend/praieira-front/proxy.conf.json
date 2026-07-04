@@ -1,0 +1,19 @@
+{
+  "/auth": {
+    "target": "http://localhost:3001",
+    "secure": false
+  },
+  "/catalog": {
+    "target": "http://localhost:3002",
+    "secure": false,
+    "logLevel": "debug"
+  },
+  "/reviews": {
+    "target": "http://localhost:3003",
+    "secure": false
+  },
+  "/interactions": {
+    "target": "http://localhost:3003",
+    "secure": false
+  }
+}
