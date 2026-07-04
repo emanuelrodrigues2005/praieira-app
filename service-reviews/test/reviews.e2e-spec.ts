@@ -10,6 +10,9 @@ process.env.STUB_WORKER_PROFILE_STATUS = "APPROVED";
 process.env.STUB_WORKER_PROFILE_ACTIVE = "true";
 process.env.STUB_WORKER_WHATSAPP = "5581999999999";
 process.env.STUB_WORKER_PHONE = "5581812345678";
+process.env.STUB_WORKER_PROFILE_NAME = "Barraca do João";
+process.env.STUB_WORKER_PROFILE_CATEGORY = "Alimentação";
+process.env.STUB_WORKER_PROFILE_BEACH = "Porto de Galinhas";
 
 import { Test, TestingModule } from "@nestjs/testing";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
@@ -42,6 +45,9 @@ describe("service-reviews (e2e)", () => {
     isActive: true,
     whatsapp: "5581999999999",
     phone: "5581812345678",
+    name: "Barraca do João",
+    category: "Alimentação",
+    beach: "Porto de Galinhas",
   };
 
   beforeAll(async () => {
@@ -488,6 +494,241 @@ describe("service-reviews (e2e)", () => {
         where: { eventName: "review.reported.v1" },
       });
       expect(events).toHaveLength(1);
+    });
+  });
+
+  // ── GET /reviews/me ──
+  describe("GET /reviews/me", () => {
+    it("returns 401 without JWT", async () => {
+      await request(app.getHttpServer())
+        .get("/reviews/me")
+        .expect(401);
+    });
+
+    it("returns 403 for WORKER role", async () => {
+      const token = generateToken(WORKER);
+      await request(app.getHttpServer())
+        .get("/reviews/me")
+        .set("Authorization", `Bearer ${token}`)
+        .expect(403);
+    });
+
+    it("returns empty array if user has no reviews", async () => {
+      const token = generateToken(TOURIST_A);
+      const res = await request(app.getHttpServer())
+        .get("/reviews/me")
+        .set("Authorization", `Bearer ${token}`)
+        .expect(200);
+
+      expect(res.body.data).toEqual([]);
+      expect(res.body.meta.total).toBe(0);
+    });
+
+    it("returns paginated reviews with workerName", async () => {
+      const token = generateToken(TOURIST_A);
+      // Create a review
+      await request(app.getHttpServer())
+        .post("/reviews")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ workerProfileId: WORKER_PROFILE_ID, rating: 4, comment: "Bom!" })
+        .expect(201);
+
+      const res = await request(app.getHttpServer())
+        .get("/reviews/me")
+        .set("Authorization", `Bearer ${token}`)
+        .expect(200);
+
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].workerName).toBe("Barraca do João");
+      expect(res.body.data[0].rating).toBe(4);
+      expect(res.body.data[0].workerProfileId).toBe(WORKER_PROFILE_ID);
+      expect(res.body.meta.page).toBe(1);
+      expect(res.body.meta.total).toBe(1);
+    });
+
+    it("only returns authenticated user's reviews", async () => {
+      const tokenA = generateToken(TOURIST_A);
+      const tokenB = generateToken(TOURIST_B);
+
+      // TOURIST_A creates a review
+      await request(app.getHttpServer())
+        .post("/reviews")
+        .set("Authorization", `Bearer ${tokenA}`)
+        .send({ workerProfileId: WORKER_PROFILE_ID, rating: 5 })
+        .expect(201);
+
+      // TOURIST_B creates a review
+      await request(app.getHttpServer())
+        .post("/reviews")
+        .set("Authorization", `Bearer ${tokenB}`)
+        .send({ workerProfileId: WORKER_PROFILE_ID, rating: 3 })
+        .expect(201);
+
+      // TOURIST_A sees only their own review
+      const res = await request(app.getHttpServer())
+        .get("/reviews/me")
+        .set("Authorization", `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].rating).toBe(5);
+    });
+  });
+
+  // ── Favorites ──
+  describe("Favorites", () => {
+    const OTHER_WORKER_ID = "20000000-0000-4000-8000-000000000002";
+
+    it("POST /favorites/:workerId returns 401 without JWT", async () => {
+      await request(app.getHttpServer())
+        .post(`/favorites/${WORKER_PROFILE_ID}`)
+        .expect(401);
+    });
+
+    it("POST /favorites/:workerId returns 403 for WORKER role", async () => {
+      const token = generateToken(WORKER);
+      await request(app.getHttpServer())
+        .post(`/favorites/${WORKER_PROFILE_ID}`)
+        .set("Authorization", `Bearer ${token}`)
+        .expect(403);
+    });
+
+    it("POST /favorites/:workerId creates favorite", async () => {
+      const token = generateToken(TOURIST_A);
+      const res = await request(app.getHttpServer())
+        .post(`/favorites/${WORKER_PROFILE_ID}`)
+        .set("Authorization", `Bearer ${token}`)
+        .expect(201);
+
+      expect(res.body.data.workerProfileId).toBe(WORKER_PROFILE_ID);
+      expect(res.body.data.touristUserId).toBe(TOURIST_A.sub);
+
+      // Check outbox event
+      const events = await prisma.outboxEvent.findMany({
+        where: { eventName: "favorite.added.v1" },
+      });
+      expect(events).toHaveLength(1);
+      expect(events[0].payload).toHaveProperty("favoriteId");
+      expect(events[0].payload).toHaveProperty("workerProfileId", WORKER_PROFILE_ID);
+    });
+
+    it("POST /favorites/:workerId returns 409 for duplicate", async () => {
+      const token = generateToken(TOURIST_A);
+      await request(app.getHttpServer())
+        .post(`/favorites/${WORKER_PROFILE_ID}`)
+        .set("Authorization", `Bearer ${token}`)
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post(`/favorites/${WORKER_PROFILE_ID}`)
+        .set("Authorization", `Bearer ${token}`)
+        .expect(409);
+    });
+
+    it("POST /favorites/:workerId returns 404 for non-existent worker", async () => {
+      const token = generateToken(TOURIST_A);
+      await request(app.getHttpServer())
+        .post(`/favorites/${OTHER_WORKER_ID}`)
+        .set("Authorization", `Bearer ${token}`)
+        .expect(404);
+    });
+
+    it("GET /favorites returns empty array if no favorites", async () => {
+      const token = generateToken(TOURIST_A);
+      const res = await request(app.getHttpServer())
+        .get("/favorites")
+        .set("Authorization", `Bearer ${token}`)
+        .expect(200);
+
+      expect(res.body.data).toEqual([]);
+      expect(res.body.meta.total).toBe(0);
+    });
+
+    it("GET /favorites returns favorites grouped by beach", async () => {
+      const token = generateToken(TOURIST_A);
+
+      // Create a review to have a rating
+      await request(app.getHttpServer())
+        .post("/reviews")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ workerProfileId: WORKER_PROFILE_ID, rating: 4 })
+        .expect(201);
+
+      // Add favorite
+      await request(app.getHttpServer())
+        .post(`/favorites/${WORKER_PROFILE_ID}`)
+        .set("Authorization", `Bearer ${token}`)
+        .expect(201);
+
+      const res = await request(app.getHttpServer())
+        .get("/favorites")
+        .set("Authorization", `Bearer ${token}`)
+        .expect(200);
+
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].beach).toBe("Porto de Galinhas");
+      expect(res.body.data[0].favorites).toHaveLength(1);
+      expect(res.body.data[0].favorites[0].worker.name).toBe("Barraca do João");
+      expect(res.body.data[0].favorites[0].worker.category).toBe("Alimentação");
+      expect(res.body.data[0].favorites[0].worker.beach).toBe("Porto de Galinhas");
+      expect(res.body.data[0].favorites[0].rating).toBe(4);
+      expect(res.body.meta.total).toBe(1);
+    });
+
+    it("DELETE /favorites/:id removes favorite", async () => {
+      const token = generateToken(TOURIST_A);
+
+      const createRes = await request(app.getHttpServer())
+        .post(`/favorites/${WORKER_PROFILE_ID}`)
+        .set("Authorization", `Bearer ${token}`)
+        .expect(201);
+
+      const favoriteId = createRes.body.data.id;
+
+      await request(app.getHttpServer())
+        .delete(`/favorites/${favoriteId}`)
+        .set("Authorization", `Bearer ${token}`)
+        .expect(204);
+
+      // Check outbox event for removal
+      const events = await prisma.outboxEvent.findMany({
+        where: { eventName: "favorite.removed.v1" },
+      });
+      expect(events).toHaveLength(1);
+      expect(events[0].payload).toHaveProperty("favoriteId", favoriteId);
+
+      // Verify it's gone
+      const listRes = await request(app.getHttpServer())
+        .get("/favorites")
+        .set("Authorization", `Bearer ${token}`)
+        .expect(200);
+
+      expect(listRes.body.data).toEqual([]);
+    });
+
+    it("DELETE /favorites/:id returns 403 for non-owner", async () => {
+      const tokenA = generateToken(TOURIST_A);
+      const tokenB = generateToken(TOURIST_B);
+
+      const createRes = await request(app.getHttpServer())
+        .post(`/favorites/${WORKER_PROFILE_ID}`)
+        .set("Authorization", `Bearer ${tokenA}`)
+        .expect(201);
+
+      const favoriteId = createRes.body.data.id;
+
+      await request(app.getHttpServer())
+        .delete(`/favorites/${favoriteId}`)
+        .set("Authorization", `Bearer ${tokenB}`)
+        .expect(403);
+    });
+
+    it("DELETE /favorites/:id returns 404 if not found", async () => {
+      const token = generateToken(TOURIST_A);
+      await request(app.getHttpServer())
+        .delete("/favorites/00000000-0000-0000-0000-000000000000")
+        .set("Authorization", `Bearer ${token}`)
+        .expect(404);
     });
   });
 });

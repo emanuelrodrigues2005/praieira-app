@@ -6,6 +6,10 @@ export interface FakeCatalogProfile {
   isActive: boolean;
   whatsapp?: string;
   phone?: string;
+  name?: string;
+  category?: string;
+  beach?: string;
+  coverImage?: string;
 }
 
 export function createFakeCatalogServer(

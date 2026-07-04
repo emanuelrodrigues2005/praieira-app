@@ -114,6 +114,33 @@ describe("WorkerProfile CRUD (e2e) — real DB", () => {
 
       expect(res.status).toBe(401);
     });
+
+    it("should create a profile with all new establishment fields (201)", async () => {
+      const payload = {
+        ...validPayload,
+        coverImage: "https://example.com/cover.jpg",
+        gallery: ["https://example.com/photo1.jpg", "https://example.com/photo2.jpg"],
+        tags: ["Frutos do Mar", "Pet Friendly"],
+        businessHours: {
+          seg: { open: "08:00", close: "18:00" },
+          sab: { open: "09:00", close: "13:00" },
+        },
+      };
+
+      const res = await request(app.getHttpServer())
+        .post("/catalog/workers")
+        .set(authHeader(testUsers.worker))
+        .send(payload);
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.coverImage).toBe("https://example.com/cover.jpg");
+      expect(res.body.data.gallery).toEqual(["https://example.com/photo1.jpg", "https://example.com/photo2.jpg"]);
+      expect(res.body.data.tags).toEqual(["Frutos do Mar", "Pet Friendly"]);
+      expect(res.body.data.businessHours).toEqual({
+        seg: { open: "08:00", close: "18:00" },
+        sab: { open: "09:00", close: "13:00" },
+      });
+    });
   });
 
   // ── Bullet 3: List own profiles ──
@@ -286,6 +313,38 @@ describe("WorkerProfile CRUD (e2e) — real DB", () => {
 
       expect(res.status).toBe(404);
     });
+
+    it("should return all new establishment fields in the response for an APPROVED profile", async () => {
+      const createRes = await request(app.getHttpServer())
+        .post("/catalog/workers")
+        .set(authHeader(testUsers.worker))
+        .send({
+          name: "Full Profile",
+          category: "barraqueiro",
+          latitude: -8.25,
+          longitude: -35.0,
+          beach: "Gaibu",
+          coverImage: "https://example.com/cover.jpg",
+          gallery: ["https://example.com/pic1.jpg"],
+          tags: ["Pet Friendly", "Música ao vivo"],
+          businessHours: { seg: { open: "08:00", close: "18:00" } },
+        });
+
+      const profileId = createRes.body.data.id;
+      await prismaService.workerProfile.update({
+        where: { id: profileId },
+        data: { status: "APPROVED" },
+      });
+
+      const res = await request(app.getHttpServer())
+        .get(`/catalog/workers/${profileId}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.coverImage).toBe("https://example.com/cover.jpg");
+      expect(res.body.data.gallery).toEqual(["https://example.com/pic1.jpg"]);
+      expect(res.body.data.tags).toEqual(["Pet Friendly", "Música ao vivo"]);
+      expect(res.body.data.businessHours).toEqual({ seg: { open: "08:00", close: "18:00" } });
+    });
   });
 
   // ── Bullet 6: Edit profile as owner ──
@@ -395,6 +454,196 @@ describe("WorkerProfile CRUD (e2e) — real DB", () => {
 
       expect(res.status).toBe(409);
       expect(res.body.error.code).toBe("CONFLICT");
+    });
+
+    it("should update coverImage field", async () => {
+      const createRes = await request(app.getHttpServer())
+        .post("/catalog/workers")
+        .set(authHeader(testUsers.worker))
+        .send({ name: "Cover Test", category: "barraqueiro", latitude: -8.25, longitude: -35.0, beach: "Gaibu" });
+
+      const profileId = createRes.body.data.id;
+
+      const res = await request(app.getHttpServer())
+        .patch(`/catalog/workers/${profileId}`)
+        .set(authHeader(testUsers.worker))
+        .send({ coverImage: "https://example.com/new-cover.jpg" });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.coverImage).toBe("https://example.com/new-cover.jpg");
+    });
+
+    it("should update gallery field", async () => {
+      const createRes = await request(app.getHttpServer())
+        .post("/catalog/workers")
+        .set(authHeader(testUsers.worker))
+        .send({ name: "Gallery Test", category: "barraqueiro", latitude: -8.25, longitude: -35.0, beach: "Gaibu" });
+
+      const profileId = createRes.body.data.id;
+
+      const res = await request(app.getHttpServer())
+        .patch(`/catalog/workers/${profileId}`)
+        .set(authHeader(testUsers.worker))
+        .send({ gallery: ["https://example.com/pic1.jpg", "https://example.com/pic2.jpg"] });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.gallery).toEqual(["https://example.com/pic1.jpg", "https://example.com/pic2.jpg"]);
+    });
+
+    it("should update tags field", async () => {
+      const createRes = await request(app.getHttpServer())
+        .post("/catalog/workers")
+        .set(authHeader(testUsers.worker))
+        .send({ name: "Tags Test", category: "barraqueiro", latitude: -8.25, longitude: -35.0, beach: "Gaibu" });
+
+      const profileId = createRes.body.data.id;
+
+      const res = await request(app.getHttpServer())
+        .patch(`/catalog/workers/${profileId}`)
+        .set(authHeader(testUsers.worker))
+        .send({ tags: ["Música ao vivo", "Pet Friendly", "Acessível"] });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.tags).toEqual(["Música ao vivo", "Pet Friendly", "Acessível"]);
+    });
+
+    it("should update businessHours field", async () => {
+      const createRes = await request(app.getHttpServer())
+        .post("/catalog/workers")
+        .set(authHeader(testUsers.worker))
+        .send({ name: "Hours Test", category: "barraqueiro", latitude: -8.25, longitude: -35.0, beach: "Gaibu" });
+
+      const profileId = createRes.body.data.id;
+
+      const res = await request(app.getHttpServer())
+        .patch(`/catalog/workers/${profileId}`)
+        .set(authHeader(testUsers.worker))
+        .send({
+          businessHours: {
+            seg: { open: "09:00", close: "17:00" },
+            ter: { open: "09:00", close: "17:00" },
+            qua: { open: "09:00", close: "17:00" },
+            qui: { open: "09:00", close: "17:00" },
+            sex: { open: "09:00", close: "20:00" },
+            sab: { open: "10:00", close: "14:00" },
+          },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.businessHours.seg).toEqual({ open: "09:00", close: "17:00" });
+      expect(res.body.data.businessHours.sex).toEqual({ open: "09:00", close: "20:00" });
+    });
+
+    it("should reject invalid coverImage URL (400)", async () => {
+      const createRes = await request(app.getHttpServer())
+        .post("/catalog/workers")
+        .set(authHeader(testUsers.worker))
+        .send({ name: "Validation Test", category: "barraqueiro", latitude: -8.25, longitude: -35.0, beach: "Gaibu" });
+
+      const profileId = createRes.body.data.id;
+
+      const res = await request(app.getHttpServer())
+        .patch(`/catalog/workers/${profileId}`)
+        .set(authHeader(testUsers.worker))
+        .send({ coverImage: "not-a-valid-url" });
+
+      expect(res.status).toBe(400);
+    });
+
+    it("should reject more than 10 gallery images (400)", async () => {
+      const createRes = await request(app.getHttpServer())
+        .post("/catalog/workers")
+        .set(authHeader(testUsers.worker))
+        .send({ name: "Gallery Limit", category: "barraqueiro", latitude: -8.25, longitude: -35.0, beach: "Gaibu" });
+
+      const profileId = createRes.body.data.id;
+
+      const res = await request(app.getHttpServer())
+        .patch(`/catalog/workers/${profileId}`)
+        .set(authHeader(testUsers.worker))
+        .send({ gallery: Array.from({ length: 11 }, (_, i) => `https://example.com/photo${i}.jpg`) });
+
+      expect(res.status).toBe(400);
+    });
+
+    it("should reject more than 10 tags (400)", async () => {
+      const createRes = await request(app.getHttpServer())
+        .post("/catalog/workers")
+        .set(authHeader(testUsers.worker))
+        .send({ name: "Tags Limit", category: "barraqueiro", latitude: -8.25, longitude: -35.0, beach: "Gaibu" });
+
+      const profileId = createRes.body.data.id;
+
+      const res = await request(app.getHttpServer())
+        .patch(`/catalog/workers/${profileId}`)
+        .set(authHeader(testUsers.worker))
+        .send({ tags: Array.from({ length: 11 }, (_, i) => `Tag ${i + 1}`) });
+
+      expect(res.status).toBe(400);
+    });
+
+    it("should reject tag exceeding 50 characters (400)", async () => {
+      const createRes = await request(app.getHttpServer())
+        .post("/catalog/workers")
+        .set(authHeader(testUsers.worker))
+        .send({ name: "Tag Length", category: "barraqueiro", latitude: -8.25, longitude: -35.0, beach: "Gaibu" });
+
+      const profileId = createRes.body.data.id;
+
+      const res = await request(app.getHttpServer())
+        .patch(`/catalog/workers/${profileId}`)
+        .set(authHeader(testUsers.worker))
+        .send({ tags: ["A".repeat(51)] });
+
+      expect(res.status).toBe(400);
+    });
+
+    it("should reject businessHours with invalid day key (400)", async () => {
+      const createRes = await request(app.getHttpServer())
+        .post("/catalog/workers")
+        .set(authHeader(testUsers.worker))
+        .send({ name: "Hours Keys", category: "barraqueiro", latitude: -8.25, longitude: -35.0, beach: "Gaibu" });
+
+      const profileId = createRes.body.data.id;
+
+      const res = await request(app.getHttpServer())
+        .patch(`/catalog/workers/${profileId}`)
+        .set(authHeader(testUsers.worker))
+        .send({ businessHours: { mon: { open: "08:00", close: "18:00" } } });
+
+      expect(res.status).toBe(400);
+    });
+
+    it("should reject businessHours with close before open (400)", async () => {
+      const createRes = await request(app.getHttpServer())
+        .post("/catalog/workers")
+        .set(authHeader(testUsers.worker))
+        .send({ name: "Hours Order", category: "barraqueiro", latitude: -8.25, longitude: -35.0, beach: "Gaibu" });
+
+      const profileId = createRes.body.data.id;
+
+      const res = await request(app.getHttpServer())
+        .patch(`/catalog/workers/${profileId}`)
+        .set(authHeader(testUsers.worker))
+        .send({ businessHours: { seg: { open: "18:00", close: "08:00" } } });
+
+      expect(res.status).toBe(400);
+    });
+
+    it("should reject businessHours with invalid time format (400)", async () => {
+      const createRes = await request(app.getHttpServer())
+        .post("/catalog/workers")
+        .set(authHeader(testUsers.worker))
+        .send({ name: "Hours Format", category: "barraqueiro", latitude: -8.25, longitude: -35.0, beach: "Gaibu" });
+
+      const profileId = createRes.body.data.id;
+
+      const res = await request(app.getHttpServer())
+        .patch(`/catalog/workers/${profileId}`)
+        .set(authHeader(testUsers.worker))
+        .send({ businessHours: { sab: { open: "25:00", close: "18:00" } } });
+
+      expect(res.status).toBe(400);
     });
   });
 
