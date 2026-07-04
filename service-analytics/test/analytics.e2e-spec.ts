@@ -5,10 +5,12 @@ import { AppModule } from "../src/app.module";
 import { MongooseModule } from "@nestjs/mongoose";
 import { Connection } from "mongoose";
 import { getConnectionToken } from "@nestjs/mongoose";
+import { createServer, Server } from "http";
 
 describe("service-analytics (e2e)", () => {
   let app: INestApplication;
   let connection: Connection;
+  let catalogServer: Server;
 
   beforeAll(async () => {
     process.env.NODE_ENV = "test";
@@ -17,6 +19,32 @@ describe("service-analytics (e2e)", () => {
     process.env.JWT_SECRET = "test-jwt-secret";
     process.env.RMQ_URL = "amqp://guest:guest@localhost:5673";
     process.env.RMQ_EXCHANGE = "praieira.events.test";
+    process.env.CATALOG_URL = "http://127.0.0.1:3302";
+
+    catalogServer = createServer((req, res) => {
+      const match = req.url?.match(/\/catalog\/workers\/(.+)/);
+      if (match) {
+        const id = match[1];
+        res.setHeader("Content-Type", "application/json");
+
+        if (id === "10000000-0000-4000-8000-000000000001") {
+          res.writeHead(200);
+          res.end(
+            JSON.stringify({
+              data: {
+                id,
+                ownerUserId: "00000000-0000-4000-8000-000000000003",
+              },
+            }),
+          );
+          return;
+        }
+      }
+
+      res.writeHead(404);
+      res.end(JSON.stringify({ error: "Not found" }));
+    });
+    catalogServer.listen(3302);
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -34,6 +62,9 @@ describe("service-analytics (e2e)", () => {
       await connection.close();
     }
     await app.close();
+    if (catalogServer) {
+      await new Promise<void>((resolve) => catalogServer.close(() => resolve()));
+    }
   });
 
   const ANALYTICS_COLLECTIONS = ["worker_daily_metrics", "profile_views", "processed_events"];
@@ -66,9 +97,9 @@ describe("service-analytics (e2e)", () => {
     });
   });
 
-  // ── WORKER blocked ──
+  // ── WORKER access ──
   describe("WORKER access", () => {
-    it("returns 403 for WORKER role on worker summary", async () => {
+    it("returns 200 for WORKER role on own worker summary", async () => {
       const { JwtService } = require("@nestjs/jwt");
       const jwt = new JwtService({ secret: "test-jwt-secret" });
       const token = jwt.sign({
@@ -79,6 +110,51 @@ describe("service-analytics (e2e)", () => {
 
       await request(app.getHttpServer())
         .get("/analytics/workers/10000000-0000-4000-8000-000000000001/summary")
+        .set("Authorization", `Bearer ${token}`)
+        .expect(200);
+    });
+
+    it("returns 403 for WORKER role on someone else's worker summary", async () => {
+      const { JwtService } = require("@nestjs/jwt");
+      const jwt = new JwtService({ secret: "test-jwt-secret" });
+      const token = jwt.sign({
+        sub: "00000000-0000-4000-8000-999999999999",
+        role: "WORKER",
+        email: "worker-other@test.com",
+      });
+
+      await request(app.getHttpServer())
+        .get("/analytics/workers/10000000-0000-4000-8000-000000000001/summary")
+        .set("Authorization", `Bearer ${token}`)
+        .expect(403);
+    });
+
+    it("returns 200 for WORKER role on own worker timeseries", async () => {
+      const { JwtService } = require("@nestjs/jwt");
+      const jwt = new JwtService({ secret: "test-jwt-secret" });
+      const token = jwt.sign({
+        sub: "00000000-0000-4000-8000-000000000003",
+        role: "WORKER",
+        email: "worker@test.com",
+      });
+
+      await request(app.getHttpServer())
+        .get("/analytics/workers/10000000-0000-4000-8000-000000000001/timeseries")
+        .set("Authorization", `Bearer ${token}`)
+        .expect(200);
+    });
+
+    it("returns 403 for WORKER role on someone else's worker timeseries", async () => {
+      const { JwtService } = require("@nestjs/jwt");
+      const jwt = new JwtService({ secret: "test-jwt-secret" });
+      const token = jwt.sign({
+        sub: "00000000-0000-4000-8000-999999999999",
+        role: "WORKER",
+        email: "worker-other@test.com",
+      });
+
+      await request(app.getHttpServer())
+        .get("/analytics/workers/10000000-0000-4000-8000-000000000001/timeseries")
         .set("Authorization", `Bearer ${token}`)
         .expect(403);
     });

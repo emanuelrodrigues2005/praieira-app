@@ -180,6 +180,7 @@ services:
       MAX_RETRY_ATTEMPTS: "3"
       RETRY_DELAY_MS: "2000"
       CORS_ORIGIN: "http://localhost:4200"
+      CATALOG_URL: "http://service-catalog:3002"
     depends_on:
       mongo_db:
         condition: service_healthy
