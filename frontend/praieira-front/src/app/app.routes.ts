@@ -18,7 +18,6 @@ export const routes: Routes = [
   {
     path: '',
     component: AppShellComponent,
-    canActivate: [AuthGuard],
     children: [
       { path: '', loadComponent: () => import('./features/home/home.component').then(m => m.HomeComponent) },
       { path: 'explorar', loadComponent: () => import('./features/catalog/search-page.component').then(m => m.SearchPageComponent) },

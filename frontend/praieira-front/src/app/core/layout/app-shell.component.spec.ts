@@ -3,6 +3,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { Router } from '@angular/router';
 import { Component } from '@angular/core';
 import { AppShellComponent } from './app-shell.component';
+import { AuthStore } from '../auth/auth.store';
 
 @Component({ template: '', standalone: true })
 class StubMapComponent {}
@@ -11,6 +12,8 @@ class StubMapComponent {}
 class StubSearchComponent {}
 
 describe('AppShellComponent', () => {
+  let authStore: AuthStore;
+
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [
@@ -21,9 +24,47 @@ describe('AppShellComponent', () => {
         ]),
       ],
     }).compileComponents();
+    authStore = TestBed.inject(AuthStore);
   });
 
-  it('should render sidebar navigation with Minha Conta link', () => {
+  it('should render sidebar navigation with Início, Buscar, Mapa', () => {
+    const fixture = TestBed.createComponent(AppShellComponent);
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const links = el.querySelectorAll('.sidebar-nav a');
+    const linkArray = Array.from(links).map((a) => ({
+      text: (a as HTMLAnchorElement).textContent?.trim(),
+      href: (a as HTMLAnchorElement).getAttribute('routerLink'),
+    }));
+
+    expect(linkArray.some((l) => l.text === 'Início' && l.href === '/')).toBe(true);
+    expect(linkArray.some((l) => l.text === 'Buscar' && l.href === '/explorar')).toBe(true);
+    expect(linkArray.some((l) => l.text === 'Mapa' && l.href === '/explorar/mapa')).toBe(true);
+  });
+
+  it('should not show auth-only links when not authenticated', () => {
+    const fixture = TestBed.createComponent(AppShellComponent);
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const links = el.querySelectorAll('.sidebar-nav a');
+    const linkArray = Array.from(links).map((a) => ({
+      text: (a as HTMLAnchorElement).textContent?.trim(),
+      href: (a as HTMLAnchorElement).getAttribute('routerLink'),
+    }));
+
+    expect(linkArray.some((l) => l.href === '/minha-conta')).toBe(false);
+    expect(linkArray.some((l) => l.href === '/favoritos')).toBe(false);
+    expect(linkArray.some((l) => l.href === '/minhas-reviews')).toBe(false);
+  });
+
+  it('should show auth-only links when authenticated', () => {
+    authStore.login(
+      { sub: 'u1', role: 'TOURIST', email: 't@t.com' },
+      'token',
+      'refresh',
+    );
     const fixture = TestBed.createComponent(AppShellComponent);
     fixture.detectChanges();
 
@@ -35,6 +76,8 @@ describe('AppShellComponent', () => {
     }));
 
     expect(linkArray.some((l) => l.text === 'Minha Conta' && l.href === '/minha-conta')).toBe(true);
+    expect(linkArray.some((l) => l.text === 'Favoritos' && l.href === '/favoritos')).toBe(true);
+    expect(linkArray.some((l) => l.text === 'Minhas Reviews' && l.href === '/minhas-reviews')).toBe(true);
   });
 
   it('should hide sidebar when navigating to /explorar/mapa', async () => {
