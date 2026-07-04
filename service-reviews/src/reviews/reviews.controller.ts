@@ -27,6 +27,7 @@ import { UpdateReviewDto } from "./dto/update-review.dto";
 import { ModerateReviewDto } from "./dto/moderate-review.dto";
 import { CreateReportDto } from "./dto/create-report.dto";
 import { ListReviewsQueryDto } from "./dto/list-reviews-query.dto";
+import { ListMyReviewsQueryDto } from "./dto/list-my-reviews-query.dto";
 import { JwtAuthGuard } from "../common/auth/jwt-auth.guard";
 import { RolesGuard } from "../common/auth/roles.guard";
 import { Roles } from "../common/auth/roles.decorator";
@@ -58,6 +59,31 @@ export class ReviewsController {
     return {
       data: review,
       meta: { requestId: req.headers["x-correlation-id"] as string },
+    };
+  }
+
+  @Get("me")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("TOURIST")
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "List own reviews (tourist)" })
+  @ApiQuery({ name: "page", required: false, type: Number })
+  @ApiQuery({ name: "limit", required: false, type: Number })
+  @ApiResponse({ status: 200, description: "Paginated user reviews" })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
+  @ApiResponse({ status: 403, description: "Forbidden" })
+  async getMyReviews(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: ListMyReviewsQueryDto,
+    @Req() req: Request,
+  ) {
+    const result = await this.reviewsService.getMyReviews(user.sub, query);
+    return {
+      ...result,
+      meta: {
+        ...result.meta,
+        requestId: req.headers["x-correlation-id"] as string,
+      },
     };
   }
 

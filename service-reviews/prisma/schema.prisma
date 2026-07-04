@@ -117,3 +117,14 @@ model OutboxEvent {
   @@index([status, nextAttemptAt])
   @@map("outbox_events")
 }
+
+model Favorite {
+  id              String   @id @default(uuid())
+  touristUserId   String   @map("tourist_user_id")
+  workerProfileId String   @map("worker_profile_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@unique([touristUserId, workerProfileId])
+  @@index([touristUserId])
+  @@map("favorites")
+}
