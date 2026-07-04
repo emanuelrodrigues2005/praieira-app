@@ -61,6 +61,29 @@ export class ReviewsController {
     };
   }
 
+  @Get("me")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("TOURIST")
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "List reviews for the authenticated tourist" })
+  @ApiQuery({ name: "page", required: false, type: Number })
+  @ApiQuery({ name: "limit", required: false, type: Number })
+  @ApiResponse({ status: 200, description: "Paginated reviews" })
+  async listMyReviews(
+    @Query() query: ListReviewsQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
+  ) {
+    const result = await this.reviewsService.listMyReviews(user.sub, query);
+    return {
+      ...result,
+      meta: {
+        ...result.meta,
+        requestId: req.headers["x-correlation-id"] as string,
+      },
+    };
+  }
+
   @Get("worker/:workerProfileId")
   @ApiOperation({ summary: "List reviews for a worker profile" })
   @ApiParam({ name: "workerProfileId", description: "Worker profile UUID" })

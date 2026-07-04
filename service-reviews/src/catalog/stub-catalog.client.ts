@@ -19,6 +19,9 @@ export class StubCatalogClient implements CatalogClient {
       id:
         process.env.STUB_WORKER_PROFILE_ID ??
         "10000000-0000-4000-8000-000000000001",
+      name:
+        process.env.STUB_WORKER_NAME ??
+        "Estabelecimento Teste",
       publicationStatus:
         (process.env
           .STUB_WORKER_PROFILE_STATUS as PublicWorkerProfile["publicationStatus"]) ??

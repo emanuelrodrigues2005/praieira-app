@@ -1,5 +1,6 @@
 export interface PublicWorkerProfile {
   id: string;
+  name: string;
   publicationStatus:
     | "DRAFT"
     | "PENDING"

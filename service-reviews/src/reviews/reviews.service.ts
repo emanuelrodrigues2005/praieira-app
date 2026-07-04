@@ -139,6 +139,66 @@ export class ReviewsService {
     };
   }
 
+  async listMyReviews(userId: string, query: ListReviewsQueryDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const where = {
+      touristUserId: userId,
+    };
+
+    const [data, total] = await Promise.all([
+      this.prisma.review.findMany({
+        where,
+        select: {
+          id: true,
+          workerProfileId: true,
+          touristUserId: true,
+          rating: true,
+          comment: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      this.prisma.review.count({ where }),
+    ]);
+
+    // Resolve establishment names from catalog for unique worker profiles
+    const workerProfileIds = [...new Set(data.map((r) => r.workerProfileId))];
+    const nameCache = new Map<string, string>();
+
+    await Promise.all(
+      workerProfileIds.map(async (id) => {
+        try {
+          const profile = await this.catalogClient.getPublicWorkerProfile(id);
+          nameCache.set(id, profile.name);
+        } catch {
+          nameCache.set(id, "Estabelecimento");
+        }
+      }),
+    );
+
+    const enrichedData = data.map((r) => ({
+      ...r,
+      establishmentName: nameCache.get(r.workerProfileId) ?? "Estabelecimento",
+    }));
+
+    return {
+      data: enrichedData,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
   async summary(workerProfileId: string) {
     const result = await this.prisma.$queryRawUnsafe<
       Array<{
