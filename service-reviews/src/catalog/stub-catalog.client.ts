@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException, UnprocessableEntityException } f
 import {
   CatalogClient,
   PublicWorkerProfile,
+  WorkerProfileDetails,
 } from "./catalog-client.interface";
 
 /**
@@ -13,6 +14,7 @@ import {
 export class StubCatalogClient implements CatalogClient {
   private readonly logger = new Logger(StubCatalogClient.name);
   private readonly profile: PublicWorkerProfile;
+  private readonly details: WorkerProfileDetails;
 
   constructor() {
     this.profile = {
@@ -29,6 +31,14 @@ export class StubCatalogClient implements CatalogClient {
       isActive: process.env.STUB_WORKER_PROFILE_ACTIVE !== "false",
       whatsapp: process.env.STUB_WORKER_WHATSAPP ?? "5581999999999",
       phone: process.env.STUB_WORKER_PHONE ?? "5581812345678",
+    };
+
+    this.details = {
+      id: this.profile.id,
+      name: process.env.STUB_WORKER_PROFILE_NAME ?? "Barraca do João",
+      category: process.env.STUB_WORKER_PROFILE_CATEGORY ?? "Alimentação",
+      beach: process.env.STUB_WORKER_PROFILE_BEACH ?? "Porto de Galinhas",
+      coverImage: process.env.STUB_WORKER_PROFILE_COVER_IMAGE ?? undefined,
     };
 
     this.logger.warn(
@@ -54,5 +64,15 @@ export class StubCatalogClient implements CatalogClient {
     }
 
     return this.profile;
+  }
+
+  async getWorkerProfileDetails(
+    id: string,
+  ): Promise<WorkerProfileDetails> {
+    if (id !== this.details.id) {
+      throw new NotFoundException("Worker profile not found");
+    }
+
+    return this.details;
   }
 }

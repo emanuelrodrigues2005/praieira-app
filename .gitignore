@@ -38,3 +38,5 @@ tmp/
 
 # Angular
 .angular/
+
+reasonix.toml

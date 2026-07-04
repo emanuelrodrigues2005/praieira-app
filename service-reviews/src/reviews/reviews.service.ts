@@ -9,12 +9,13 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { CATALOG_CLIENT, CatalogClient } from "../catalog/catalog-client.interface";
+import { CATALOG_CLIENT, CatalogClient, WorkerProfileDetails } from "../catalog/catalog-client.interface";
 import { CreateReviewDto } from "./dto/create-review.dto";
 import { UpdateReviewDto } from "./dto/update-review.dto";
 import { ModerateReviewDto } from "./dto/moderate-review.dto";
 import { CreateReportDto } from "./dto/create-report.dto";
 import { ListReviewsQueryDto } from "./dto/list-reviews-query.dto";
+import { ListMyReviewsQueryDto } from "./dto/list-my-reviews-query.dto";
 import { AuthenticatedUser } from "../common/types/authenticated-user";
 import { Prisma } from "@prisma/client";
 import { CorrelationService } from "../common/correlation/correlation.service";
@@ -139,14 +140,12 @@ export class ReviewsService {
     };
   }
 
-  async listMyReviews(userId: string, query: ListReviewsQueryDto) {
+  async getMyReviews(touristUserId: string, query: ListMyReviewsQueryDto) {
     const page = query.page ?? 1;
-    const limit = query.limit ?? 20;
+    const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
 
-    const where = {
-      touristUserId: userId,
-    };
+    const where = { touristUserId };
 
     const [data, total] = await Promise.all([
       this.prisma.review.findMany({
@@ -154,7 +153,6 @@ export class ReviewsService {
         select: {
           id: true,
           workerProfileId: true,
-          touristUserId: true,
           rating: true,
           comment: true,
           status: true,
@@ -168,28 +166,36 @@ export class ReviewsService {
       this.prisma.review.count({ where }),
     ]);
 
-    // Resolve establishment names from catalog for unique worker profiles
-    const workerProfileIds = [...new Set(data.map((r) => r.workerProfileId))];
-    const nameCache = new Map<string, string>();
+    // Fetch worker names from catalog, deduplicating IDs
+    const workerIds = [...new Set(data.map((r) => r.workerProfileId))];
+    const workerNames = new Map<string, string>();
 
-    await Promise.all(
-      workerProfileIds.map(async (id) => {
-        try {
-          const profile = await this.catalogClient.getPublicWorkerProfile(id);
-          nameCache.set(id, profile.name);
-        } catch {
-          nameCache.set(id, "Estabelecimento");
-        }
-      }),
-    );
+    if (workerIds.length > 0) {
+      await Promise.all(
+        workerIds.map(async (id) => {
+          try {
+            const details = await this.catalogClient.getWorkerProfileDetails(id);
+            workerNames.set(id, details.name);
+          } catch {
+            workerNames.set(id, "Perfil não encontrado");
+          }
+        }),
+      );
+    }
 
-    const enrichedData = data.map((r) => ({
-      ...r,
-      establishmentName: nameCache.get(r.workerProfileId) ?? "Estabelecimento",
+    const reviewsWithWorkerName = data.map((r) => ({
+      id: r.id,
+      workerProfileId: r.workerProfileId,
+      workerName: workerNames.get(r.workerProfileId) ?? "Perfil não encontrado",
+      rating: r.rating,
+      comment: r.comment,
+      status: r.status,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
     }));
 
     return {
-      data: enrichedData,
+      data: reviewsWithWorkerName,
       meta: {
         page,
         limit,

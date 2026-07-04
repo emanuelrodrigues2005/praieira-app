@@ -35,6 +35,8 @@ describe("Geospatial Search (e2e)", () => {
   async function seedApprovedProfile(overrides: Partial<{
     name: string; description: string | null; category: string; beach: string;
     latitude: number; longitude: number; status: "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "SUSPENDED";
+    coverImage: string | null; gallery: string[]; tags: string[];
+    businessHours: Record<string, { open: string; close: string }> | null;
   }> = {}) {
     return prismaService.workerProfile.create({
       data: {
@@ -46,6 +48,10 @@ describe("Geospatial Search (e2e)", () => {
         latitude: overrides.latitude ?? -8.25,
         longitude: overrides.longitude ?? -35.0,
         status: overrides.status ?? "APPROVED",
+        coverImage: overrides.coverImage ?? undefined,
+        gallery: overrides.gallery ?? [],
+        tags: overrides.tags ?? [],
+        businessHours: overrides.businessHours ?? undefined,
       },
     });
   }
@@ -82,6 +88,25 @@ describe("Geospatial Search (e2e)", () => {
       expect(res.status).toBe(200);
       expect(res.body.data).toHaveLength(1);
       expect(res.body.data[0].name).toBe("Visible");
+    });
+
+    it("should return establishment fields (coverImage, gallery, tags, businessHours) in search results", async () => {
+      await seedApprovedProfile({
+        name: "Full Profile",
+        coverImage: "https://example.com/cover.jpg",
+        gallery: ["https://example.com/pic1.jpg"],
+        tags: ["Pet Friendly", "Música ao vivo"],
+        businessHours: { seg: { open: "08:00", close: "18:00" } },
+      });
+
+      const res = await request(app.getHttpServer()).get("/catalog/search");
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].coverImage).toBe("https://example.com/cover.jpg");
+      expect(res.body.data[0].gallery).toEqual(["https://example.com/pic1.jpg"]);
+      expect(res.body.data[0].tags).toEqual(["Pet Friendly", "Música ao vivo"]);
+      expect(res.body.data[0].businessHours).toEqual({ seg: { open: "08:00", close: "18:00" } });
     });
   });
 

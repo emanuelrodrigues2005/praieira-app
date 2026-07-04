@@ -4,6 +4,7 @@ import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 import { AppController } from "./app.controller";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ReviewsModule } from "./reviews/reviews.module";
+import { FavoritesModule } from "./favorites/favorites.module";
 import { InteractionsModule } from "./interactions/interactions.module";
 import { MessagingModule } from "./messaging/messaging.module";
 import { PassportModule } from "@nestjs/passport";
@@ -28,6 +29,7 @@ import { CorrelationMiddleware } from "./common/correlation/correlation.middlewa
     PrismaModule,
     MessagingModule,
     ReviewsModule,
+    FavoritesModule,
     InteractionsModule,
   ],
   controllers: [AppController],
