@@ -9,6 +9,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { JwtService } from "@nestjs/jwt";
 import { RegisterDto } from "./dto/register.dto";
 import { LoginDto } from "./dto/login.dto";
+import { ChangePasswordDto } from "./dto/change-password.dto";
 import * as bcrypt from "bcryptjs";
 import { randomUUID, createHash } from "crypto";
 
@@ -296,6 +297,34 @@ export class AuthService {
     });
 
     return { success: true };
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || !user.isActive || user.deletedAt) {
+      throw new UnauthorizedException("User not found or inactive");
+    }
+
+    const currentPasswordMatch = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+    if (!currentPasswordMatch) {
+      throw new UnauthorizedException("Invalid current password");
+    }
+
+    if (dto.newPassword === dto.currentPassword) {
+      throw new ConflictException("New password cannot be the same as the current password");
+    }
+
+    const newPasswordHash = await bcrypt.hash(dto.newPassword, 12);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: newPasswordHash },
+    });
+
+    return { message: "Password updated successfully" };
   }
 
   private hashToken(token: string): string {

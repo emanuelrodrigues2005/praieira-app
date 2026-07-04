@@ -232,7 +232,7 @@ describe("AuthService", () => {
           revokedAt: null,
         },
         data: {
-          revokedAt: new Date(),
+          revokedAt: expect.any(Date),
         },
       });
     });
@@ -275,6 +275,89 @@ describe("AuthService", () => {
           correlationId: "corr-123",
         }),
       });
+    });
+  });
+
+  describe("changePassword", () => {
+    it("should successfully update password if all criteria are met", async () => {
+      const currentHashed = await bcrypt.hash("oldpassword123", 10);
+      const user = {
+        id: "user-123",
+        email: "joao@test.com",
+        passwordHash: currentHashed,
+        role: Role.TOURIST,
+        isActive: true,
+        deletedAt: null,
+      };
+
+      prisma.user.findUnique.mockResolvedValue(user);
+      prisma.user.update.mockResolvedValue({ ...user });
+
+      const dto = {
+        currentPassword: "oldpassword123",
+        newPassword: "newpassword123",
+      };
+
+      const result = await service.changePassword("user-123", dto);
+
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { id: "user-123" },
+      });
+      expect(prisma.user.update).toHaveBeenCalled();
+      expect(result).toEqual({ message: "Password updated successfully" });
+    });
+
+    it("should throw UnauthorizedException if user not found", async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      const dto = {
+        currentPassword: "oldpassword123",
+        newPassword: "newpassword123",
+      };
+
+      await expect(service.changePassword("user-none", dto)).rejects.toThrow(UnauthorizedException);
+    });
+
+    it("should throw UnauthorizedException if current password is wrong", async () => {
+      const currentHashed = await bcrypt.hash("oldpassword123", 10);
+      const user = {
+        id: "user-123",
+        email: "joao@test.com",
+        passwordHash: currentHashed,
+        role: Role.TOURIST,
+        isActive: true,
+        deletedAt: null,
+      };
+
+      prisma.user.findUnique.mockResolvedValue(user);
+
+      const dto = {
+        currentPassword: "wrongpassword123",
+        newPassword: "newpassword123",
+      };
+
+      await expect(service.changePassword("user-123", dto)).rejects.toThrow(UnauthorizedException);
+    });
+
+    it("should throw ConflictException if new password is same as current password", async () => {
+      const currentHashed = await bcrypt.hash("oldpassword123", 10);
+      const user = {
+        id: "user-123",
+        email: "joao@test.com",
+        passwordHash: currentHashed,
+        role: Role.TOURIST,
+        isActive: true,
+        deletedAt: null,
+      };
+
+      prisma.user.findUnique.mockResolvedValue(user);
+
+      const dto = {
+        currentPassword: "oldpassword123",
+        newPassword: "oldpassword123",
+      };
+
+      await expect(service.changePassword("user-123", dto)).rejects.toThrow(ConflictException);
     });
   });
 });
