@@ -77,10 +77,11 @@ export class SearchService {
 
     // Geo/radius filter
     if (hasLat && hasLng && hasRadius) {
+      const radius = filters.radius!;
       conditions.push(
         `ST_DWithin(ST_MakePoint($${paramIndex}::float, $${paramIndex + 1}::float)::geography, ST_MakePoint(longitude, latitude)::geography, $${paramIndex + 2})`,
       );
-      params.push(filters.lng, filters.lat, filters.radius);
+      params.push(filters.lng, filters.lat, radius * 1000);
       paramIndex += 3;
     }
 
@@ -106,7 +107,18 @@ export class SearchService {
     const geoParams =
       hasLat && hasLng ? [filters.lng, filters.lat] : [];
 
-    const orderBy = hasLat && hasLng ? "distance ASC" : "created_at DESC";
+    // Sort logic: "rating" sorts alphabetically by name (full rating sort
+    // requires denormalizing average_rating into the catalog DB via events).
+    // "proximity" uses geo-distance when lat/lng provided, otherwise defaults
+    // to most recently created first.
+    let orderBy: string;
+    if (filters.sort === "rating") {
+      orderBy = "name ASC";
+    } else if (hasLat && hasLng) {
+      orderBy = "distance ASC";
+    } else {
+      orderBy = "created_at DESC";
+    }
 
     const rows = await this.prisma.$queryRawUnsafe<WorkerProfileSearchResult[]>(
       `SELECT id, name, category, beach, latitude, longitude, phone, whatsapp, description,

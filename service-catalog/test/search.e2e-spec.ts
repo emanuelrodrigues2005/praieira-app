@@ -138,14 +138,14 @@ describe("Geospatial Search (e2e)", () => {
     });
 
     it("?lat&lng&radius should filter by distance", async () => {
-      const res = await request(app.getHttpServer()).get("/catalog/search?lat=-8.25&lng=-35.0&radius=5000");
+      const res = await request(app.getHttpServer()).get("/catalog/search?lat=-8.25&lng=-35.0&radius=5");
       expect(res.status).toBe(200);
       expect(res.body.data).toHaveLength(1);
       expect(res.body.data[0].name).toBe("Near Gaibu");
     });
 
     it("should include distance field when geo params provided", async () => {
-      const res = await request(app.getHttpServer()).get("/catalog/search?lat=-8.25&lng=-35.0&radius=50000");
+      const res = await request(app.getHttpServer()).get("/catalog/search?lat=-8.25&lng=-35.0&radius=50");
       expect(res.status).toBe(200);
       expect(res.body.data.length).toBeGreaterThan(0);
       expect(res.body.data[0]).toHaveProperty("distance");
@@ -153,7 +153,7 @@ describe("Geospatial Search (e2e)", () => {
     });
 
     it("should order by distance ascending", async () => {
-      const res = await request(app.getHttpServer()).get("/catalog/search?lat=-8.25&lng=-35.0&radius=50000");
+      const res = await request(app.getHttpServer()).get("/catalog/search?lat=-8.25&lng=-35.0&radius=50");
       expect(res.status).toBe(200);
       expect(res.body.data.length).toBe(2);
       expect(res.body.data[0].distance).toBeLessThan(res.body.data[1].distance);
@@ -216,7 +216,7 @@ describe("Geospatial Search (e2e)", () => {
 
     it("?text&beach&category&lat&lng&radius should apply all filters", async () => {
       const res = await request(app.getHttpServer())
-        .get("/catalog/search?text=barraca&beach=Gaibu&category=barraqueiro&lat=-8.25&lng=-35.0&radius=10000");
+        .get("/catalog/search?text=barraca&beach=Gaibu&category=barraqueiro&lat=-8.25&lng=-35.0&radius=10");
       expect(res.status).toBe(200);
       expect(res.body.data).toHaveLength(1);
       expect(res.body.data[0].name).toBe("Barraca do João");
