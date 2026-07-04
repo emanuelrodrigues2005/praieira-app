@@ -27,6 +27,7 @@ import { RolesGuard } from "./common/auth/roles.guard";
 import { Roles } from "./common/auth/roles.decorator";
 import { CurrentUser } from "./common/auth/current-user.decorator";
 import { AuthenticatedUser } from "./common/auth/jwt.strategy";
+import { WorkerOwnershipGuard } from "./common/auth/worker-ownership.guard";
 
 @ApiTags("Analytics")
 @Controller()
@@ -409,7 +410,7 @@ export class AnalyticsController {
   // ── REST Endpoints ──
 
   @Get("analytics/workers/:id/summary")
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, WorkerOwnershipGuard)
   @Roles("WORKER", "CURATOR")
   @ApiBearerAuth()
   @ApiOperation({ summary: "Worker metrics summary" })
@@ -421,13 +422,6 @@ export class AnalyticsController {
     @Query("to") to?: string,
     @CurrentUser() user?: AuthenticatedUser,
   ) {
-    // Block WORKER until catalog ownership verification exists
-    if (user?.role === "WORKER") {
-      throw new ForbiddenException(
-        "A verificação de propriedade do perfil ainda não está disponível.",
-      );
-    }
-
     this.validateDateRange(from, to);
 
     const today = new Date().toISOString().slice(0, 10);
@@ -445,8 +439,8 @@ export class AnalyticsController {
   }
 
   @Get("analytics/workers/:id/timeseries")
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles("CURATOR")
+  @UseGuards(JwtAuthGuard, RolesGuard, WorkerOwnershipGuard)
+  @Roles("WORKER", "CURATOR")
   @ApiBearerAuth()
   @ApiOperation({ summary: "Worker daily timeseries" })
   @ApiQuery({ name: "from", required: false })
