@@ -43,16 +43,24 @@ describe("service-analytics events (e2e)", () => {
 
   afterAll(async () => {
     if (connection) {
-      await connection.dropDatabase();
+      await cleanCollections(connection);
       await connection.close();
     }
     await app.close();
   });
 
   beforeEach(async () => {
-    await connection.dropDatabase();
+    await cleanCollections(connection);
     jest.clearAllMocks();
   });
+
+  const ANALYTICS_COLLECTIONS = ["worker_daily_metrics", "profile_views", "processed_events"];
+
+  async function cleanCollections(conn: Connection): Promise<void> {
+    for (const name of ANALYTICS_COLLECTIONS) {
+      try { await conn.collection(name).deleteMany({}); } catch { /* ok */ }
+    }
+  }
 
   async function getMetrics(workerProfileId: string, date: string) {
     return connection
