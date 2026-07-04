@@ -1,13 +1,13 @@
 export interface PublicWorkerProfile {
   id: string;
   name: string;
-  publicationStatus:
+  status:
     | "DRAFT"
     | "PENDING"
     | "APPROVED"
     | "REJECTED"
     | "SUSPENDED";
-  isActive: boolean;
+  isActive?: boolean;
   whatsapp?: string;
   phone?: string;
 }

@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from "@nestjs/common";
+import { Injectable, BadRequestException, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { SearchQueryDto } from "./dto/search-query.dto";
 
@@ -17,6 +17,8 @@ export interface WorkerProfileSearchResult {
   tags: string[];
   businessHours: Record<string, { open: string; close: string }> | null;
   distance?: number;
+  averageRating?: number;
+  totalReviews?: number;
 }
 
 export interface PaginationMeta {
@@ -34,7 +36,13 @@ export interface PaginatedResponse<T> {
 
 @Injectable()
 export class SearchService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(SearchService.name);
+  private readonly reviewsBaseUrl: string;
+
+  constructor(private readonly prisma: PrismaService) {
+    this.reviewsBaseUrl =
+      process.env.REVIEWS_URL ?? "http://localhost:3003";
+  }
 
   async search(filters: SearchQueryDto): Promise<PaginatedResponse<WorkerProfileSearchResult>> {
     // Validate geo params
@@ -133,8 +141,11 @@ export class SearchService {
       offset,
     );
 
+    // Batch-fetch review ratings for all returned profiles
+    const rowsWithRatings = await this.attachRatingsToRows(rows);
+
     return {
-      data: rows,
+      data: rowsWithRatings,
       meta: {
         page,
         limit,
@@ -143,5 +154,50 @@ export class SearchService {
         requestId: "",
       },
     };
+  }
+
+  private async attachRatingsToRows(rows: WorkerProfileSearchResult[]): Promise<WorkerProfileSearchResult[]> {
+    if (rows.length === 0) return [];
+
+    const ids = rows.map((r) => r.id);
+
+    const ratingMap = new Map<string, { averageRating: number; totalReviews: number }>();
+
+    await Promise.all(
+      ids.map(async (id) => {
+        try {
+          const url = `${this.reviewsBaseUrl}/reviews/worker/${id}/summary`;
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 2000);
+          const response = await fetch(url, {
+            signal: controller.signal,
+            headers: { Accept: "application/json" },
+          });
+          clearTimeout(timeout);
+
+          if (response.ok) {
+            const body = await response.json();
+            const summary = body.data;
+            ratingMap.set(id, {
+              averageRating: summary.averageRating ?? 0,
+              totalReviews: summary.totalReviews ?? 0,
+            });
+          }
+        } catch (error: any) {
+          this.logger.warn(
+            `Failed to fetch ratings for profile ${id}: ${error.message}`,
+          );
+        }
+      }),
+    );
+
+    return rows.map((row) => {
+      const ratings = ratingMap.get(row.id);
+      return {
+        ...row,
+        averageRating: ratings?.averageRating ?? 0,
+        totalReviews: ratings?.totalReviews ?? 0,
+      };
+    });
   }
 }

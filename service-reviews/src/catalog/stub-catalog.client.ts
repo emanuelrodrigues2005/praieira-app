@@ -24,9 +24,9 @@ export class StubCatalogClient implements CatalogClient {
       name:
         process.env.STUB_WORKER_NAME ??
         "Estabelecimento Teste",
-      publicationStatus:
+      status:
         (process.env
-          .STUB_WORKER_PROFILE_STATUS as PublicWorkerProfile["publicationStatus"]) ??
+          .STUB_WORKER_PROFILE_STATUS as PublicWorkerProfile["status"]) ??
         "APPROVED",
       isActive: process.env.STUB_WORKER_PROFILE_ACTIVE !== "false",
       whatsapp: process.env.STUB_WORKER_WHATSAPP ?? "5581999999999",
@@ -53,13 +53,13 @@ export class StubCatalogClient implements CatalogClient {
       throw new NotFoundException("Worker profile not found");
     }
 
-    if (this.profile.publicationStatus !== "APPROVED") {
+    if (this.profile.status !== "APPROVED") {
       throw new UnprocessableEntityException(
         "Worker profile is not available for reviews",
       );
     }
 
-    if (!this.profile.isActive) {
+    if (this.profile.isActive === false) {
       throw new UnprocessableEntityException("Worker profile is not active");
     }
 
