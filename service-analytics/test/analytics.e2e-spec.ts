@@ -30,11 +30,19 @@ describe("service-analytics (e2e)", () => {
 
   afterAll(async () => {
     if (connection) {
-      await connection.dropDatabase();
+      await cleanCollections(connection);
       await connection.close();
     }
     await app.close();
   });
+
+  const ANALYTICS_COLLECTIONS = ["worker_daily_metrics", "profile_views", "processed_events"];
+
+  async function cleanCollections(conn: Connection): Promise<void> {
+    for (const name of ANALYTICS_COLLECTIONS) {
+      try { await conn.collection(name).deleteMany({}); } catch { /* ok */ }
+    }
+  }
 
   // ── Health ──
   describe("GET /health", () => {
