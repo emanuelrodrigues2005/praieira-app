@@ -35,6 +35,13 @@ export interface RegisterResponseData {
 
 export type RegisterResponse = SuccessResponse<RegisterResponseData>;
 
+export interface RefreshResponseData {
+  accessToken: string;
+  refreshToken: string;
+}
+
+export type RefreshResponse = SuccessResponse<RefreshResponseData>;
+
 export const API_BASE_URL = new InjectionToken<string>('API_BASE_URL', {
   providedIn: 'root',
   factory: () => '',
@@ -54,5 +61,11 @@ export class AuthApiService {
 
   register(dto: RegisterRequest): Observable<RegisterResponse> {
     return this.http.post<RegisterResponse>(`${this.baseUrl}/auth/register`, dto);
+  }
+
+  refresh(refreshToken: string): Observable<RefreshResponse> {
+    return this.http.post<RefreshResponse>(`${this.baseUrl}/auth/refresh`, {
+      refreshToken,
+    });
   }
 }
