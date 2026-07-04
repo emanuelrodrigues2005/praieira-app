@@ -664,6 +664,7 @@ export class RegisterComponent implements OnInit {
             email: res.data.user.email,
           },
           res.data.accessToken,
+          res.data.refreshToken,
         );
         this.router.navigate(['/']);
       },

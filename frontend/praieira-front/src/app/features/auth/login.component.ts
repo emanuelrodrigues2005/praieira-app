@@ -223,6 +223,7 @@ export class LoginComponent {
             email: res.data.user.email,
           },
           res.data.accessToken,
+          res.data.refreshToken,
         );
         this.router.navigate(['/']);
       },
